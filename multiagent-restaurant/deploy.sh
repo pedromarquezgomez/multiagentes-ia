@@ -10,7 +10,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuración
-PROJECT_ID="multiagentes-vinos"
+PROJECT_ID="maitre-ia"
 REGION="europe-west1"
 OPENAI_SECRET_NAME="openai-api-key"
 
@@ -23,16 +23,16 @@ if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" | grep -q
 fi
 
 # Configurar proyecto
-gcloud config set project $PROJECT_ID
+gcloud config set project $PROJECT_ID --quiet
 
 echo -e "${YELLOW}🔧 Habilitando APIs necesarias...${NC}"
-gcloud services enable cloudbuild.googleapis.com run.googleapis.com secretmanager.googleapis.com
+gcloud services enable cloudbuild.googleapis.com run.googleapis.com secretmanager.googleapis.com --project=$PROJECT_ID
 
 echo -e "${YELLOW}🔍 Verificando el secreto de OpenAI...${NC}"
-if ! gcloud secrets describe $OPENAI_SECRET_NAME --quiet 2>/dev/null; then
+if ! gcloud secrets describe $OPENAI_SECRET_NAME --project=$PROJECT_ID --quiet 2>/dev/null; then
     echo -e "${RED}❌ El secreto '$OPENAI_SECRET_NAME' no existe.${NC}"
     echo "Créalo primero con:"
-    echo "  echo -n 'tu-api-key' | gcloud secrets create $OPENAI_SECRET_NAME --data-file=-"
+    echo "  echo -n 'tu-api-key' | gcloud secrets create $OPENAI_SECRET_NAME --data-file=- --project=$PROJECT_ID"
     exit 1
 fi
 
@@ -46,9 +46,12 @@ gcloud run deploy mcp-server \
     --max-instances 10 \
     --platform managed \
     --set-env-vars ENVIRONMENT=cloud,GOOGLE_CLOUD_PROJECT=$PROJECT_ID \
+    --cpu-boost \
+    --timeout=600s \
+    --project=$PROJECT_ID \
     --quiet
 
-MCP_SERVER_URL=$(gcloud run services describe mcp-server --region=$REGION --format="value(status.url)")
+MCP_SERVER_URL=$(gcloud run services describe mcp-server --region=$REGION --project=$PROJECT_ID --format="value(status.url)")
 echo -e "${GREEN}✅ MCP Server desplegado en: $MCP_SERVER_URL${NC}"
 
 echo -e "${YELLOW}🍷 Desplegando Sumiller Bot...${NC}"
@@ -62,9 +65,10 @@ gcloud run deploy sumiller-bot \
     --platform managed \
     --set-env-vars ENVIRONMENT=cloud,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,CLOUD_MCP_SERVER_URL=$MCP_SERVER_URL \
     --set-secrets OPENAI_API_KEY=$OPENAI_SECRET_NAME:latest \
+    --project=$PROJECT_ID \
     --quiet
 
-SUMILLER_URL=$(gcloud run services describe sumiller-bot --region=$REGION --format="value(status.url)")
+SUMILLER_URL=$(gcloud run services describe sumiller-bot --region=$REGION --project=$PROJECT_ID --format="value(status.url)")
 echo -e "${GREEN}✅ Sumiller Bot desplegado en: $SUMILLER_URL${NC}"
 
 echo -e "${YELLOW}🎩 Desplegando Maitre Bot...${NC}"
@@ -77,9 +81,10 @@ gcloud run deploy maitre-bot \
     --max-instances 10 \
     --platform managed \
     --set-env-vars ENVIRONMENT=cloud,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,CLOUD_SUMILLER_URL=$SUMILLER_URL \
+    --project=$PROJECT_ID \
     --quiet
 
-MAITRE_URL=$(gcloud run services describe maitre-bot --region=$REGION --format="value(status.url)")
+MAITRE_URL=$(gcloud run services describe maitre-bot --region=$REGION --project=$PROJECT_ID --format="value(status.url)")
 echo -e "${GREEN}✅ Maitre Bot desplegado en: $MAITRE_URL${NC}"
 
 echo -e "${YELLOW}🌐 Desplegando UI...${NC}"
@@ -88,7 +93,7 @@ cd ui
 VITE_MAITRE_URL=$MAITRE_URL npm run build
 
 # Desplegar en Firebase Hosting
-firebase deploy --only hosting
+firebase deploy --only hosting --project=$PROJECT_ID
 cd ..
 
 echo ""

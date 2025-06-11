@@ -48,7 +48,8 @@ app.add_middleware(
 
 # Configuración del servicio
 SUMILLER_URL = config.get_service_url('sumiller')
-PORT = int(os.environ.get("PORT", str(config.maitre_port if config.is_local() else 8000)))
+# Configuración del puerto que funciona en local y Cloud Run
+PORT = int(os.environ.get("PORT", str(config.maitre_port if config.is_local() else 8080)))
 
 logger.info(f"🚀 Iniciando Maitre Bot en puerto {PORT}")
 logger.info(f"🎯 URL del Sumiller: {SUMILLER_URL}")

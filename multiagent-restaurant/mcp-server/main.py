@@ -19,7 +19,8 @@ from config import config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-PORT = int(os.getenv("PORT", str(config.mcp_port if config.is_local() else 8002)))
+# Configuración del puerto que funciona en local y Cloud Run
+PORT = int(os.getenv("PORT", str(config.mcp_port if config.is_local() else 8080)))
 
 # Variables globales para ChromaDB
 wine_collection = None

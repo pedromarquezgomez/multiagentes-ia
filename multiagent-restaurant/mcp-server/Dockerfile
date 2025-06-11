@@ -12,18 +12,16 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar código fuente
+# Copiar código fuente y archivo de configuración
 COPY . .
+COPY config.py .
 
 # Copiar archivo de datos de vinos
 COPY wines.json .
 
-# Exponer puerto
-EXPOSE 8002
+# Exponer puerto (Cloud Run usará PORT env var)
+EXPOSE 8080
 
-# Puerto que espera Cloud Run
-ENV PORT=8002
-
-# Comando para ejecutar la aplicación con Uvicorn.
-# Cloud Run utilizará el $PORT definido en la variable de entorno anterior.
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002"]
+# Comando para ejecutar la aplicación con Uvicorn
+# Cloud Run proporcionará el puerto a través de la variable PORT
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"]

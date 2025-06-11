@@ -14,17 +14,30 @@ PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configuración
-BASE_URL="http://localhost"
-MAITRE_PORT="8000"
-SUMILLER_PORT="8001"
-MCP_PORT="8002"
-UI_PORT="3000"
-
-# URLs
-MAITRE_URL="${BASE_URL}:${MAITRE_PORT}"
-SUMILLER_URL="${BASE_URL}:${SUMILLER_PORT}"
-MCP_URL="${BASE_URL}:${MCP_PORT}"
-UI_URL="${BASE_URL}:${UI_PORT}"
+# Detectar si estamos testando local o cloud
+if [ "${1}" = "cloud" ] || [ "${ENVIRONMENT}" = "cloud" ] || [ -n "${CLOUD_MAITRE_URL}" ]; then
+    echo -e "${BLUE}🌐 Modo Cloud Run detectado${NC}"
+    # URLs de Cloud Run
+    MAITRE_URL="${CLOUD_MAITRE_URL:-https://maitre-bot-rkhznukoea-ew.a.run.app}"
+    SUMILLER_URL="${CLOUD_SUMILLER_URL:-https://sumiller-bot-rkhznukoea-ew.a.run.app}"
+    MCP_URL="${CLOUD_MCP_SERVER_URL:-https://mcp-server-rkhznukoea-ew.a.run.app}"
+    UI_URL="https://maitre-ia.web.app"
+    ENV_MODE="CLOUD"
+else
+    echo -e "${BLUE}🏠 Modo Local detectado${NC}"
+    # URLs locales (configuración original)
+    BASE_URL="http://localhost"
+    MAITRE_PORT="8000"
+    SUMILLER_PORT="8001"
+    MCP_PORT="8002"
+    UI_PORT="3000"
+    
+    MAITRE_URL="${BASE_URL}:${MAITRE_PORT}"
+    SUMILLER_URL="${BASE_URL}:${SUMILLER_PORT}"
+    MCP_URL="${BASE_URL}:${MCP_PORT}"
+    UI_URL="${BASE_URL}:${UI_PORT}"
+    ENV_MODE="LOCAL"
+fi
 
 echo -e "${PURPLE}🍷 SUMY WINE RECOMMENDER - SCRIPT DE TESTING${NC}"
 echo -e "${PURPLE}================================================${NC}"
@@ -236,11 +249,16 @@ test_edge_cases() {
 show_config() {
     echo -e "${YELLOW}⚙️  CONFIGURACIÓN DEL SISTEMA${NC}"
     echo -e "${YELLOW}=============================${NC}"
+    echo -e "   Entorno:       ${ENV_MODE}"
     echo -e "   Maitre Bot:    $MAITRE_URL"
     echo -e "   Sumiller Bot:  $SUMILLER_URL"
     echo -e "   MCP Server:    $MCP_URL"
     echo -e "   UI:            $UI_URL"
-    echo -e "   OpenAI Key:    $(echo $OPENAI_API_KEY | head -c 10)...${GREEN}✓${NC}"
+    if [ -n "$OPENAI_API_KEY" ]; then
+        echo -e "   OpenAI Key:    $(echo $OPENAI_API_KEY | head -c 10)...${GREEN}✓${NC}"
+    else
+        echo -e "   OpenAI Key:    ${YELLOW}No configurada localmente (usando secreto Cloud)${NC}"
+    fi
     echo ""
 }
 
@@ -261,7 +279,15 @@ show_stats() {
 
 # Función principal
 main() {
-    case "${1:-all}" in
+    # Si el primer argumento es "cloud", removemos y ejecutamos todos los tests
+    if [ "${1}" = "cloud" ]; then
+        shift  # Remover "cloud" de los argumentos
+        command="${1:-all}"  # Si no hay más argumentos, usar "all"
+    else
+        command="${1:-all}"
+    fi
+    
+    case "$command" in
         "services")
             show_config
             check_services
@@ -307,6 +333,7 @@ main() {
             echo ""
             echo -e "Commands:"
             echo -e "  ${YELLOW}all${NC}         - Ejecuta todos los tests (default)"
+            echo -e "  ${YELLOW}cloud${NC}       - Ejecuta todos los tests en Cloud Run"
             echo -e "  ${YELLOW}services${NC}    - Verifica que todos los servicios estén activos"
             echo -e "  ${YELLOW}health${NC}      - Health checks de todos los servicios"
             echo -e "  ${YELLOW}mcp${NC}         - Prueba búsqueda directa en MCP Server"
@@ -317,9 +344,14 @@ main() {
             echo -e "  ${YELLOW}help${NC}        - Muestra esta ayuda"
             echo ""
             echo -e "Examples:"
-            echo -e "  ${BLUE}./tester.sh${NC}              # Ejecuta todos los tests"
+            echo -e "  ${BLUE}./tester.sh${NC}              # Ejecuta todos los tests (local)"
+            echo -e "  ${BLUE}./tester.sh cloud${NC}        # Ejecuta todos los tests (Cloud Run)"
             echo -e "  ${BLUE}./tester.sh health${NC}       # Solo health checks"
             echo -e "  ${BLUE}./tester.sh performance${NC}  # Solo tests de rendimiento"
+            echo ""
+            echo -e "Environment:"
+            echo -e "  ${BLUE}Local:${NC}  Usa localhost y puertos específicos"
+            echo -e "  ${BLUE}Cloud:${NC}  Usa URLs de Google Cloud Run"
             ;;
         *)
             echo -e "${RED}❌ Comando desconocido: $1${NC}"

@@ -1,0 +1,6 @@
+mcp[cli]>=1.0.0
+chromadb>=0.4.24
+numpy>=1.26.4
+tiktoken>=0.6.0
+fastapi>=0.111.0
+uvicorn[standard]>=0.24.0

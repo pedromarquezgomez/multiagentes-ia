@@ -1,0 +1,162 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+*.pyc
+*.pyo
+*.egg
+*.egg-info/
+.pytest_cache/
+.coverage
+.tox/
+.cache
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Virtual environments (all possible locations)
+*/venv/
+*/env/
+*/ENV/
+*/env.bak/
+*/venv.bak/
+
+# Node
+node_modules/
+dist/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.eslintcache
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vim/
+.emacs.d/
+
+# Build and compilation
+build/
+*.egg-info/
+.pytest_cache/
+
+# UI specific
+ui/.env.local
+ui/.env.production
+ui/dist/
+ui/node_modules/
+
+# Docker
+.dockerignore
+
+# System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Firebase
+.firebase
+database-debug.log
+firestore-debug.log
+
+# ChromaDB and vector databases
+*/chroma.sqlite3
+*/chroma_data/
+chroma.sqlite3
+chroma_data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+log/
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+.temp/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Package manager locks (keep package-lock.json but ignore others)
+yarn.lock
+pnpm-lock.yaml
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# API keys and secrets
+*.key
+*.pem
+*.crt
+secrets/
+credentials/
+
+# Local development
+.local/
+.history/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+
+dev.sh
+deploy.sh
+env
+env.local
+env.example

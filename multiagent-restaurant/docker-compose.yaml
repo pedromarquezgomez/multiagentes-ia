@@ -1,0 +1,81 @@
+# docker-compose.yaml
+version: '3.8'
+
+services:
+  maitre-bot:
+    build: ./maitre-bot
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=local
+      - PORT=8000
+      - MAITRE_PORT=8000
+      - SUMILLER_PORT=8001
+      - MCP_SERVER_PORT=8002
+      # Variables Firebase (opcionales - para autenticación)
+      - FIREBASE_PRIVATE_KEY_ID=${FIREBASE_PRIVATE_KEY_ID:-}
+      - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY:-}
+      - FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL:-}
+      - FIREBASE_CLIENT_ID=${FIREBASE_CLIENT_ID:-}
+      - FIREBASE_CERT_URL=${FIREBASE_CERT_URL:-}
+    volumes:
+      - ./config.py:/app/config.py:ro
+    networks:
+      - agent-network
+    depends_on:
+      - sumiller-bot
+
+  sumiller-bot:
+    build: ./sumiller-bot
+    ports:
+      - "8001:8001"
+    environment:
+      - ENVIRONMENT=local
+      - PORT=8001
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MAITRE_PORT=8000
+      - SUMILLER_PORT=8001
+      - MCP_SERVER_PORT=8002
+    volumes:
+      - ./config.py:/app/config.py:ro
+      - chromadb_data:/app/.chromadb
+    networks:
+      - agent-network
+    depends_on:
+      - mcp-server
+
+  mcp-server:
+    build: ./mcp-server
+    ports:
+      - "8002:8002"
+    environment:
+      - ENVIRONMENT=local
+      - PORT=8002
+      - MAITRE_PORT=8000
+      - SUMILLER_PORT=8001
+      - MCP_SERVER_PORT=8002
+    volumes:
+      - ./config.py:/app/config.py:ro
+      - chromadb_data:/app/.chromadb
+    networks:
+      - agent-network
+
+  ui:
+    build: ./ui
+    ports:
+      - "3000:80"
+    environment:
+      - ENVIRONMENT=local
+      - VITE_MAITRE_URL=http://localhost:8000
+      - UI_PORT=3000
+    depends_on:
+      - maitre-bot
+    networks:
+      - agent-network
+
+networks:
+  agent-network:
+    driver: bridge
+
+volumes:
+  chromadb_data:

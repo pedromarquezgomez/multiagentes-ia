@@ -4,6 +4,16 @@ FROM node:20-alpine as build
 
 WORKDIR /app
 
+# Arguments for Firebase configuration
+ARG VITE_FIREBASE_API_KEY=AIzaSyCyslmRlkyaQjQjqBgU__5EwDTwbElMSUE
+ARG VITE_FIREBASE_AUTH_DOMAIN=maitre-ia.firebaseapp.com
+ARG VITE_FIREBASE_PROJECT_ID=maitre-ia
+
+# Environment variables for build
+ENV VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY
+ENV VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN
+ENV VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID
+
 # Copiar archivos de dependencias
 COPY package*.json ./
 RUN npm ci

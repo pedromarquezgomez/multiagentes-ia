@@ -198,9 +198,13 @@ const sendMessage = async () => {
 
   try {
     const token = await user.value.getIdToken()
-    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'https://sumiller-bot-rkhznukoea-ew.a.run.app/query'
+    // Forzar uso de proxy en todas las configuraciones
+    const apiUrl = '/api/query'
 
-    const result = await axios.post(apiUrl, { prompt: query }, {
+    const result = await axios.post(apiUrl, { 
+      prompt: query,
+      user_id: user.value.uid || 'anonymous_user'
+    }, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     

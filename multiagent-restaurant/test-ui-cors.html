@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test CORS - Sumiller UI</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .test { margin: 20px 0; padding: 20px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 10px; cursor: pointer; }
+        #result { margin-top: 20px; padding: 10px; min-height: 100px; }
+    </style>
+</head>
+<body>
+    <h1>🍷 Test de Conexión - Sumy Sumiller</h1>
+    
+    <div class="test">
+        <h3>1. Test Proxy (recomendado para producción)</h3>
+        <button onclick="testProxy()">Probar /api/query</button>
+        <div>Usa nginx proxy dentro del contenedor</div>
+    </div>
+    
+    <div class="test">
+        <h3>2. Test CORS Directo (para desarrollo)</h3>
+        <button onclick="testDirect()">Probar localhost:8001</button>
+        <div>Conexión directa con CORS habilitado</div>
+    </div>
+    
+    <div id="result"></div>
+
+    <script>
+        async function testProxy() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '🔄 Probando proxy...';
+            
+            try {
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        prompt: 'test proxy desde navegador',
+                        user_id: 'test_browser_proxy'
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ PROXY FUNCIONANDO</h4>
+                            <p><strong>Respuesta:</strong></p>
+                            <p>${data.response.substring(0, 200)}...</p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            <h4>❌ Error en Proxy</h4>
+                            <p>Status: ${response.status}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Error de Conexión</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function testDirect() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '🔄 Probando CORS directo...';
+            
+            try {
+                const response = await fetch('http://localhost:8001/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        prompt: 'test cors directo desde navegador',
+                        user_id: 'test_browser_cors'
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ CORS DIRECTO FUNCIONANDO</h4>
+                            <p><strong>Respuesta:</strong></p>
+                            <p>${data.response.substring(0, 200)}...</p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            <h4>❌ Error en CORS</h4>
+                            <p>Status: ${response.status}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Error de CORS</h4>
+                        <p>${error.message}</p>
+                        <p>Asegúrate de que el sumiller bot esté ejecutándose en localhost:8001</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html> 

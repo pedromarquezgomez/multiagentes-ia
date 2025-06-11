@@ -14,6 +14,7 @@ import httpx
 from openai import AsyncOpenAI
 from typing import List, Dict, Any
 from fastapi import FastAPI, HTTPException, Body
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Importar configuración multi-entorno
@@ -43,6 +44,15 @@ app = FastAPI(
     title="Sumiller Bot API - Agentic RAG",
     description="Un agente inteligente con RAG agéntico que recomienda vinos personalizados.",
     version="3.0.0"
+)
+
+# Configuración de CORS para permitir conexiones desde la UI
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # --- Modelos de Datos ---

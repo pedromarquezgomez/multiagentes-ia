@@ -24,9 +24,9 @@ COPY --from=build /app/dist /usr/share/nginx/html
 RUN echo 'server { \
     listen 80; \
     \
-    # Proxy para peticiones API al maître bot \
+    # Proxy para peticiones API al sumiller bot \
     location /api/ { \
-        proxy_pass http://maitre-bot:8000/; \
+        proxy_pass http://sumiller-bot:8001/; \
         proxy_http_version 1.1; \
         proxy_set_header Upgrade $http_upgrade; \
         proxy_set_header Connection "upgrade"; \

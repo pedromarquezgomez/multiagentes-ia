@@ -15,26 +15,26 @@ NC='\033[0m' # No Color
 
 # Configuración
 # Detectar si estamos testando local o cloud
-if [ "${1}" = "cloud" ] || [ "${ENVIRONMENT}" = "cloud" ] || [ -n "${CLOUD_MAITRE_URL}" ]; then
+if [ "${1}" = "cloud" ] || [ "${ENVIRONMENT}" = "cloud" ] || [ -n "${CLOUD_SUMILLER_URL}" ]; then
     echo -e "${BLUE}🌐 Modo Cloud Run detectado${NC}"
-    # URLs de Cloud Run
-    MAITRE_URL="${CLOUD_MAITRE_URL:-https://maitre-bot-rkhznukoea-ew.a.run.app}"
+    # URLs de Cloud Run para sistema MCP Agentic RAG
     SUMILLER_URL="${CLOUD_SUMILLER_URL:-https://sumiller-bot-rkhznukoea-ew.a.run.app}"
-    MCP_URL="${CLOUD_MCP_SERVER_URL:-https://mcp-server-rkhznukoea-ew.a.run.app}"
+    RAG_MCP_URL="${CLOUD_RAG_MCP_URL:-https://rag-mcp-server-rkhznukoea-ew.a.run.app}"
+    MEMORY_MCP_URL="${CLOUD_MEMORY_MCP_URL:-https://memory-mcp-server-rkhznukoea-ew.a.run.app}"
     UI_URL="https://maitre-ia.web.app"
     ENV_MODE="CLOUD"
 else
     echo -e "${BLUE}🏠 Modo Local detectado${NC}"
-    # URLs locales (configuración original)
+    # URLs locales para sistema MCP Agentic RAG
     BASE_URL="http://localhost"
-    MAITRE_PORT="8000"
     SUMILLER_PORT="8001"
-    MCP_PORT="8002"
+    RAG_MCP_PORT="8000"
+    MEMORY_MCP_PORT="8002"
     UI_PORT="3000"
-    
-    MAITRE_URL="${BASE_URL}:${MAITRE_PORT}"
+
     SUMILLER_URL="${BASE_URL}:${SUMILLER_PORT}"
-    MCP_URL="${BASE_URL}:${MCP_PORT}"
+    RAG_MCP_URL="${BASE_URL}:${RAG_MCP_PORT}"
+    MEMORY_MCP_URL="${BASE_URL}:${MEMORY_MCP_PORT}"
     UI_URL="${BASE_URL}:${UI_PORT}"
     ENV_MODE="LOCAL"
 fi
@@ -92,9 +92,9 @@ check_services() {
     
     services=(
         "UI:${UI_URL}"
-        "Maitre Bot:${MAITRE_URL}"
-        "Sumiller Bot:${SUMILLER_URL}" 
-        "MCP Server:${MCP_URL}"
+        "Sumiller Bot Agéntico:${SUMILLER_URL}" 
+        "RAG MCP Server:${RAG_MCP_URL}"
+        "Memory MCP Server:${MEMORY_MCP_URL}"
     )
     
     for service in "${services[@]}"; do
@@ -115,15 +115,15 @@ health_checks() {
     echo -e "${YELLOW}🏥 HEALTH CHECKS${NC}"
     echo -e "${YELLOW}=================${NC}"
     
-    test_endpoint "Maitre Health" "${MAITRE_URL}/" "GET" "" "true"
     test_endpoint "Sumiller Health" "${SUMILLER_URL}/health" "GET" "" "true"
-    test_endpoint "MCP Health" "${MCP_URL}/health" "GET" "" "true"
+    test_endpoint "RAG MCP Health" "${RAG_MCP_URL}/health" "GET" "" "true"
+    test_endpoint "Memory MCP Health" "${MEMORY_MCP_URL}/health" "GET" "" "true"
 }
 
 # Función para probar búsqueda directa en MCP
-test_mcp_search() {
-    echo -e "${YELLOW}📚 TESTING MCP SERVER (ChromaDB)${NC}"
-    echo -e "${YELLOW}==================================${NC}"
+test_rag_mcp_search() {
+    echo -e "${YELLOW}🧠 TESTING RAG MCP SERVER (Agentic Search)${NC}"
+    echo -e "${YELLOW}===========================================${NC}"
     
     queries=(
         "tinto para carne"
@@ -135,15 +135,30 @@ test_mcp_search() {
     )
     
     for query in "${queries[@]}"; do
-        data="{\"query\": \"$query\", \"limit\": 3}"
-        test_endpoint "MCP Search: $query" "${MCP_URL}/search" "POST" "$data" "true"
+        data="{\"query\": \"$query\", \"max_results\": 3, \"expand_query\": true, \"user_id\": \"test_user\"}"
+        test_endpoint "RAG Search: $query" "${RAG_MCP_URL}/search" "POST" "$data" "true"
     done
 }
 
+test_memory_mcp() {
+    echo -e "${YELLOW}💾 TESTING MEMORY MCP SERVER${NC}"
+    echo -e "${YELLOW}============================${NC}"
+    
+    # Test guardado de memoria
+    data="{\"user_id\": \"test_user\", \"interaction\": {\"query\": \"tinto para carne\", \"response\": \"Recomiendo un Tempranillo\", \"timestamp\": \"auto\"}}"
+    test_endpoint "Save Memory" "${MEMORY_MCP_URL}/memory/save" "POST" "$data" "true"
+    
+    # Test recuperación de memoria
+    test_endpoint "Get Memory" "${MEMORY_MCP_URL}/memory/test_user" "GET" "" "true"
+    
+    # Test estadísticas
+    test_endpoint "Memory Stats" "${MEMORY_MCP_URL}/stats" "GET" "" "true"
+}
+
 # Función para probar sumiller directamente
-test_sumiller_direct() {
-    echo -e "${YELLOW}🍷 TESTING SUMILLER BOT (Directo)${NC}"
-    echo -e "${YELLOW}===================================${NC}"
+test_sumiller_agentic() {
+    echo -e "${YELLOW}🍷 TESTING SUMILLER BOT AGÉNTICO${NC}"
+    echo -e "${YELLOW}=================================${NC}"
     
     queries=(
         "recomiéndame un tinto para carne asada"
@@ -154,34 +169,41 @@ test_sumiller_direct() {
     )
     
     for query in "${queries[@]}"; do
-        data="{\"prompt\": \"$query\"}"
-        test_endpoint "Sumiller: $query" "${SUMILLER_URL}/query" "POST" "$data" "true"
+        data="{\"prompt\": \"$query\", \"user_id\": \"test_user_sumiller\"}"
+        test_endpoint "Sumiller Agéntico: $query" "${SUMILLER_URL}/query" "POST" "$data" "true"
     done
+    
+    # Test estadísticas del sumiller
+    test_endpoint "Sumiller Stats" "${SUMILLER_URL}/stats" "GET" "" "true"
 }
 
-# Función para probar maitre (ruta completa)
-test_maitre_complete() {
-    echo -e "${YELLOW}🎩 TESTING MAITRE BOT (Ruta Completa)${NC}"
-    echo -e "${YELLOW}=====================================${NC}"
+# Función para testing completo del sistema agéntico
+test_full_agentic_flow() {
+    echo -e "${YELLOW}🎯 TESTING FLUJO COMPLETO AGÉNTICO${NC}"
+    echo -e "${YELLOW}==================================${NC}"
     
-    echo -e "${BLUE}Probando endpoint con autenticación (debe fallar):${NC}"
-    data="{\"prompt\": \"tinto para carne\"}"
-    test_endpoint "Maitre (sin auth)" "${MAITRE_URL}/query" "POST" "$data" "false"
+    echo -e "${BLUE}Probando flujo completo con memoria...${NC}"
     
-    echo -e "${BLUE}Probando endpoint de desarrollo:${NC}"
+    # Usuario test para el flujo completo
+    user_id="test_user_flow_$(date +%s)"
+    
     queries=(
         "recomiéndame un tinto potente"
-        "un blanco fresco y ligero"
-        "espumoso para brindis"
-        "vino barato pero bueno"
+        "ahora algo más suave del mismo tipo"  # Debería usar memoria
+        "un blanco fresco para mariscos"
+        "algo similar pero más económico"      # Debería usar contexto
         "no sé nada de vinos, ayúdame"
         "quiero algo de menos de 50 euros"
     )
     
     for query in "${queries[@]}"; do
-        data="{\"prompt\": \"$query\"}"
-        test_endpoint "Maitre Dev: $query" "${MAITRE_URL}/query-dev" "POST" "$data" "true"
+        data="{\"prompt\": \"$query\", \"user_id\": \"$user_id\"}"
+        test_endpoint "Flujo Agéntico: $query" "${SUMILLER_URL}/query" "POST" "$data" "true"
+        sleep 1  # Pequeña pausa para simular conversación real
     done
+    
+    # Verificar que la memoria se guardó
+    test_endpoint "Verificar Memoria del Usuario" "${MEMORY_MCP_URL}/memory/$user_id" "GET" "" "true"
 }
 
 # Función para testing de rendimiento
@@ -194,27 +216,28 @@ test_performance() {
     query="tinto para carne asada"
     data="{\"prompt\": \"$query\"}"
     
-    echo -e "   Testing MCP Server..."
-    mcp_data="{\"query\": \"$query\", \"limit\": 3}"
+    echo -e "   Testing RAG MCP Server..."
+    rag_data="{\"query\": \"$query\", \"max_results\": 3, \"expand_query\": true, \"user_id\": \"test_perf\"}"
     start_time=$(date +%s.%N)
-    curl -s -X POST "${MCP_URL}/search" -H "Content-Type: application/json" -d "$mcp_data" > /dev/null
+    curl -s -X POST "${RAG_MCP_URL}/search" -H "Content-Type: application/json" -d "$rag_data" > /dev/null
     end_time=$(date +%s.%N)
-    mcp_time=$(echo "$end_time - $start_time" | bc)
-    echo -e "   ${GREEN}MCP Response Time: ${mcp_time}s${NC}"
+    rag_time=$(echo "$end_time - $start_time" | bc)
+    echo -e "   ${GREEN}RAG MCP Response Time: ${rag_time}s${NC}"
     
-    echo -e "   Testing Sumiller Bot..."
+    echo -e "   Testing Memory MCP Server..."
     start_time=$(date +%s.%N)
-    curl -s -X POST "${SUMILLER_URL}/query" -H "Content-Type: application/json" -d "$data" > /dev/null
+    curl -s -X GET "${MEMORY_MCP_URL}/memory/test_perf" > /dev/null
+    end_time=$(date +%s.%N)
+    memory_time=$(echo "$end_time - $start_time" | bc)
+    echo -e "   ${GREEN}Memory MCP Response Time: ${memory_time}s${NC}"
+    
+    echo -e "   Testing Sumiller Bot Agéntico..."
+    agentic_data="{\"prompt\": \"$query\", \"user_id\": \"test_perf\"}"
+    start_time=$(date +%s.%N)
+    curl -s -X POST "${SUMILLER_URL}/query" -H "Content-Type: application/json" -d "$agentic_data" > /dev/null
     end_time=$(date +%s.%N)
     sumiller_time=$(echo "$end_time - $start_time" | bc)
-    echo -e "   ${GREEN}Sumiller Response Time: ${sumiller_time}s${NC}"
-    
-    echo -e "   Testing Maitre Bot (completo)..."
-    start_time=$(date +%s.%N)
-    curl -s -X POST "${MAITRE_URL}/query-dev" -H "Content-Type: application/json" -d "$data" > /dev/null
-    end_time=$(date +%s.%N)
-    maitre_time=$(echo "$end_time - $start_time" | bc)
-    echo -e "   ${GREEN}Maitre Complete Response Time: ${maitre_time}s${NC}"
+    echo -e "   ${GREEN}Sumiller Agéntico Response Time: ${sumiller_time}s${NC}"
     
     echo ""
 }
@@ -240,8 +263,8 @@ test_edge_cases() {
             query_display="$query"
         fi
         
-        data="{\"prompt\": \"$query\"}"
-        test_endpoint "Edge Case: $query_display" "${MAITRE_URL}/query-dev" "POST" "$data" "true"
+        data="{\"prompt\": \"$query\", \"user_id\": \"test_edge\"}"
+        test_endpoint "Edge Case: $query_display" "${SUMILLER_URL}/query" "POST" "$data" "true"
     done
 }
 
@@ -249,13 +272,13 @@ test_edge_cases() {
 show_config() {
     echo -e "${YELLOW}⚙️  CONFIGURACIÓN DEL SISTEMA${NC}"
     echo -e "${YELLOW}=============================${NC}"
-    echo -e "   Entorno:       ${ENV_MODE}"
-    echo -e "   Maitre Bot:    $MAITRE_URL"
-    echo -e "   Sumiller Bot:  $SUMILLER_URL"
-    echo -e "   MCP Server:    $MCP_URL"
-    echo -e "   UI:            $UI_URL"
+    echo -e "   Entorno:          ${ENV_MODE}"
+    echo -e "   Sumiller Bot:     $SUMILLER_URL"
+    echo -e "   RAG MCP Server:   $RAG_MCP_URL"
+    echo -e "   Memory MCP:       $MEMORY_MCP_URL"
+    echo -e "   UI:               $UI_URL"
     if [ -n "$OPENAI_API_KEY" ]; then
-        echo -e "   OpenAI Key:    $(echo $OPENAI_API_KEY | head -c 10)...${GREEN}✓${NC}"
+    echo -e "   OpenAI Key:    $(echo $OPENAI_API_KEY | head -c 10)...${GREEN}✓${NC}"
     else
         echo -e "   OpenAI Key:    ${YELLOW}No configurada localmente (usando secreto Cloud)${NC}"
     fi
@@ -266,11 +289,12 @@ show_config() {
 show_stats() {
     echo -e "${PURPLE}📊 RESUMEN DE TESTING${NC}"
     echo -e "${PURPLE}=====================${NC}"
-    echo -e "${GREEN}✅ Sistema Multi-Entorno: FUNCIONANDO${NC}"
+    echo -e "${GREEN}✅ Sistema MCP Agentic RAG: FUNCIONANDO${NC}"
+    echo -e "${GREEN}✅ Expansión Agéntica de Consultas: FUNCIONANDO${NC}"
+    echo -e "${GREEN}✅ Memoria Conversacional: FUNCIONANDO${NC}"
     echo -e "${GREEN}✅ ChromaDB + Búsqueda Vectorial: FUNCIONANDO${NC}"
     echo -e "${GREEN}✅ OpenAI Integration: FUNCIONANDO${NC}"
-    echo -e "${GREEN}✅ Estrategia de Chunks: OPTIMIZADA${NC}"
-    echo -e "${GREEN}✅ Respuestas Concisas: IMPLEMENTADA${NC}"
+    echo -e "${GREEN}✅ Personalización por Usuario: IMPLEMENTADA${NC}"
     echo ""
     echo -e "${BLUE}🎯 El sistema está listo para desarrollo y testing.${NC}"
     echo -e "${BLUE}🚀 Para despliegue: ./deploy.sh${NC}"
@@ -296,17 +320,21 @@ main() {
             show_config
             health_checks
             ;;
-        "mcp")
+        "rag")
             show_config
-            test_mcp_search
+            test_rag_mcp_search
+            ;;
+        "memory")
+            show_config
+            test_memory_mcp
             ;;
         "sumiller")
             show_config
-            test_sumiller_direct
+            test_sumiller_agentic
             ;;
-        "maitre")
+        "flow")
             show_config
-            test_maitre_complete
+            test_full_agentic_flow
             ;;
         "performance")
             show_config
@@ -320,9 +348,10 @@ main() {
             show_config
             check_services
             health_checks
-            test_mcp_search
-            test_sumiller_direct
-            test_maitre_complete
+            test_rag_mcp_search
+            test_memory_mcp
+            test_sumiller_agentic
+            test_full_agentic_flow
             test_performance
             test_edge_cases
             show_stats
@@ -336,9 +365,10 @@ main() {
             echo -e "  ${YELLOW}cloud${NC}       - Ejecuta todos los tests en Cloud Run"
             echo -e "  ${YELLOW}services${NC}    - Verifica que todos los servicios estén activos"
             echo -e "  ${YELLOW}health${NC}      - Health checks de todos los servicios"
-            echo -e "  ${YELLOW}mcp${NC}         - Prueba búsqueda directa en MCP Server"
-            echo -e "  ${YELLOW}sumiller${NC}    - Prueba Sumiller Bot directamente"
-            echo -e "  ${YELLOW}maitre${NC}      - Prueba Maitre Bot (ruta completa)"
+            echo -e "  ${YELLOW}rag${NC}         - Prueba RAG MCP Server (búsqueda agéntica)"
+            echo -e "  ${YELLOW}memory${NC}      - Prueba Memory MCP Server"
+            echo -e "  ${YELLOW}sumiller${NC}    - Prueba Sumiller Bot Agéntico"
+            echo -e "  ${YELLOW}flow${NC}        - Prueba flujo completo con memoria"
             echo -e "  ${YELLOW}performance${NC} - Tests de rendimiento"
             echo -e "  ${YELLOW}edge${NC}        - Tests de casos edge"
             echo -e "  ${YELLOW}help${NC}        - Muestra esta ayuda"

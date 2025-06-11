@@ -198,7 +198,7 @@ const sendMessage = async () => {
 
   try {
     const token = await user.value.getIdToken()
-    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'https://maitre-bot-rkhznukoea-ew.a.run.app/query'
+    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'https://sumiller-bot-rkhznukoea-ew.a.run.app/query'
 
     const result = await axios.post(apiUrl, { prompt: query }, {
       headers: { 'Authorization': `Bearer ${token}` }

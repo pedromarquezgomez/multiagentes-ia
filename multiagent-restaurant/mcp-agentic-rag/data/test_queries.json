@@ -1,0 +1,46 @@
+{
+    "test_queries": [
+      {
+        "query": "¿Qué es el Protocolo de Contexto de Modelo?",
+        "expected_topics": ["MCP", "protocol", "Anthropic"],
+        "category": "definition"
+      },
+      {
+        "query": "¿Cuáles son las ventajas de RAG agéntico?",
+        "expected_topics": ["RAG", "agentic", "advantages"],
+        "category": "explanation"
+      },
+      {
+        "query": "¿Qué tipos de agentes existen en sistemas RAG?",
+        "expected_topics": ["agents", "routing", "planning", "ReAct"],
+        "category": "categorization"
+      },
+      {
+        "query": "¿Cómo funciona la arquitectura cliente-servidor de MCP?",
+        "expected_topics": ["architecture", "client", "server", "MCP"],
+        "category": "technical"
+      },
+      {
+        "query": "¿Qué diferencias hay entre RAG tradicional y RAG agéntico?",
+        "expected_topics": ["RAG", "traditional", "agentic", "differences"],
+        "category": "comparison"
+      }
+    ],
+    "test_documents": [
+      {
+        "content": "Docker es una plataforma de contenedores que permite empaquetar aplicaciones y sus dependencias en contenedores ligeros y portátiles.",
+        "metadata": {"topic": "DevOps", "technology": "Docker"},
+        "doc_id": "test_docker"
+      },
+      {
+        "content": "Python es un lenguaje de programación de alto nivel, interpretado y de propósito general, conocido por su sintaxis clara y legible.",
+        "metadata": {"topic": "Programming", "language": "Python"},
+        "doc_id": "test_python"
+      },
+      {
+        "content": "La inteligencia artificial (IA) es la simulación de procesos de inteligencia humana mediante máquinas, especialmente sistemas informáticos.",
+        "metadata": {"topic": "AI", "field": "Computer Science"},
+        "doc_id": "test_ai"
+      }
+    ]
+  }

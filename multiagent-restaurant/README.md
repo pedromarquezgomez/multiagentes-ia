@@ -1,222 +1,271 @@
-# Arquitectura Multiagente - Sumiller Virtual
+# 🍷 Sistema Sumiller Virtual con RAG Agéntico
 
-Prototipo mínimo de arquitectura multiagente con comunicación A2A usando FastAPI y estructura MCP simplificada.
+Sistema inteligente de recomendación de vinos que utiliza **DeepSeek** y **MCP Agentic RAG** para proporcionar recomendaciones personalizadas y conversacionales.
 
-## Arquitectura
-
-```
-┌─────────┐     ┌─────────────┐     ┌──────────────┐
-│   UI    │────▶│ Maitre Bot  │────▶│ Sumiller Bot │
-│  (Vue)  │◀────│(Orquestador)│◀────│ (Experto +   │
-└─────────┘     └─────────────┘     │  Mock RAG)   │
-                                    └──────────────┘
-```
-
-## Estructura del Proyecto
+## 🏗️ Arquitectura Real Actual
 
 ```
-.
-├── maitre-bot/
-│   ├── main.py          # Agente orquestador
-│   ├── requirements.txt
-│   └── Dockerfile
-├── sumiller-bot/
-│   ├── main.py          # Agente experto con mock RAG
-│   ├── requirements.txt
-│   └── Dockerfile
-├── ui/
-│   ├── src/
-│   │   ├── App.vue      # Componente principal Vue
-│   │   └── main.ts
-│   ├── index.html
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── Dockerfile
-├── docker-compose.yaml
-└── README.md
+┌─────────────┐    HTTP     ┌─────────────────┐    MCP     ┌──────────────────┐
+│     UI      │────────────▶│  Sumiller Bot   │───────────▶│  RAG MCP Server  │
+│   (Vue.js)  │◀────────────│   (DeepSeek)    │◀───────────│  (Búsqueda +     │
+└─────────────┘             └─────────────────┘            │   Generación)    │
+                                     │                     └──────────────────┘
+                                     │ MCP                            │
+                                     ▼                                ▼
+                            ┌─────────────────┐              ┌──────────────────┐
+                            │ Memory MCP      │              │    ChromaDB      │
+                            │    Server       │              │ (Base Vectorial) │
+                            └─────────────────┘              └──────────────────┘
+                                     │
+                                     ▼
+                            ┌─────────────────┐
+                            │     Redis       │
+                            │   (Memoria)     │
+                            └─────────────────┘
 ```
 
-## Comunicación A2A con estructura MCP
+## 📁 Estructura del Proyecto
 
-Los agentes se comunican usando mensajes JSON con estructura MCP simplificada:
-
-```json
-{
-  "system": "Instrucciones del sistema",
-  "user": "Consulta del usuario",
-  "context": {
-    "key": "value"
-  }
-}
+```
+multiagent-restaurant/
+├── sumiller-bot/           # ÚNICO BOT - Agente principal con DeepSeek
+│   ├── main.py            # API FastAPI con integración MCP
+│   ├── config.py          # Configuración DeepSeek
+│   └── Dockerfile         
+├── mcp-agentic-rag/       # Sistema MCP de RAG Agéntico
+│   ├── rag_mcp_server.py  # Servidor de búsqueda semántica
+│   ├── memory_mcp_server.py # Servidor de memoria conversacional
+│   └── knowledge_base/    # Base de conocimientos de vinos
+├── ui/                    # Frontend Vue.js
+│   ├── src/App.vue        # Interfaz principal
+│   └── Dockerfile         
+├── docker-compose.yaml    # Orquestación completa
+├── env.example           # Variables de entorno
+└── config.py             # Configuración global
 ```
 
-## Ejecución Local
+## 🚀 Inicio Rápido
 
-### 1. Con Docker Compose (recomendado)
+### 1. **Configuración**
+
+```bash
+# Clonar y preparar
+git clone <repository>
+cd multiagent-restaurant
+
+# Configurar variables de entorno
+cp env.example .env
+# Editar .env y agregar tu DEEPSEEK_API_KEY
+```
+
+### 2. **Ejecutar Localmente**
 
 ```bash
 # Construir y ejecutar todos los servicios
 docker compose up --build
 
-# La UI estará disponible en http://localhost:3000
-# Maitre Bot en http://localhost:8000
-# Sumiller Bot en http://localhost:8001
+# Servicios disponibles:
+# - UI: http://localhost:3000
+# - Sumiller Bot: http://localhost:8001
+# - RAG MCP Server: http://localhost:8000
+# - Memory MCP Server: http://localhost:8002
+# - Tester: http://localhost:8003
 ```
 
-### 2. Sin Docker (desarrollo)
+### 3. **Cargar Datos de Vinos**
 
 ```bash
-# Terminal 1 - Sumiller Bot
-cd sumiller-bot
-pip install -r requirements.txt
-python main.py
+# Cargar la base de conocimientos
+python load-wines.py
 
-# Terminal 2 - Maitre Bot
-cd maitre-bot
-pip install -r requirements.txt
-export SUMILLER_URL=http://localhost:8001
-python main.py
-
-# Terminal 3 - UI
-cd ui
-npm install
-npm run dev
+# Verificar carga
+curl http://localhost:8000/stats
 ```
 
-## Despliegue en Google Cloud Run
+## 🔧 Configuración DeepSeek
 
-### 1. Configurar proyecto
+### Obtener API Key
+1. Registrarse en [DeepSeek Platform](https://platform.deepseek.com/)
+2. Crear una API Key
+3. Configurar en `.env`:
 
 ```bash
-# Configurar proyecto GCP
+DEEPSEEK_API_KEY=sk-your-deepseek-api-key-here
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+```
+
+## 🌐 Despliegue en Producción
+
+### Firebase + Google Cloud Run
+
+```bash
+# 1. Configurar proyecto GCP
 export PROJECT_ID=tu-proyecto-id
-export REGION=us-central1
-
 gcloud config set project $PROJECT_ID
-gcloud config set run/region $REGION
-```
 
-### 2. Desplegar Sumiller Bot
+# 2. Desplegar servicios backend
+./deploy.sh
 
-```bash
-cd sumiller-bot
-
-# Construir y subir imagen
-gcloud builds submit --tag gcr.io/$PROJECT_ID/sumiller-bot
-
-# Desplegar en Cloud Run
-gcloud run deploy sumiller-bot \
-  --image gcr.io/$PROJECT_ID/sumiller-bot \
-  --platform managed \
-  --allow-unauthenticated \
-  --memory 512Mi
-```
-
-### 3. Desplegar Maitre Bot
-
-```bash
-cd maitre-bot
-
-# Obtener URL del Sumiller Bot
-export SUMILLER_URL=$(gcloud run services describe sumiller-bot --format 'value(status.url)')
-
-# Construir y subir imagen
-gcloud builds submit --tag gcr.io/$PROJECT_ID/maitre-bot
-
-# Desplegar con variable de entorno
-gcloud run deploy maitre-bot \
-  --image gcr.io/$PROJECT_ID/maitre-bot \
-  --platform managed \
-  --allow-unauthenticated \
-  --memory 512Mi \
-  --set-env-vars SUMILLER_URL=$SUMILLER_URL
-```
-
-### 4. Desplegar UI (opcional)
-
-```bash
+# 3. Desplegar UI a Firebase
 cd ui
-
-# Obtener URL del Maitre Bot
-export MAITRE_URL=$(gcloud run services describe maitre-bot --format 'value(status.url)')
-
-# Crear archivo .env para producción
-echo "VITE_MAITRE_URL=$MAITRE_URL" > .env.production
-
-# Construir y subir imagen
-gcloud builds submit --tag gcr.io/$PROJECT_ID/sumiller-ui
-
-# Desplegar
-gcloud run deploy sumiller-ui \
-  --image gcr.io/$PROJECT_ID/sumiller-ui \
-  --platform managed \
-  --allow-unauthenticated \
-  --memory 256Mi \
-  --port 80
+firebase deploy
 ```
 
-## Pruebas con cURL
+### URLs de Producción
+- **Frontend**: https://maitre-ia.web.app
+- **Backend**: https://sumiller-bot-xxxxx.run.app
+- **RAG Server**: https://rag-mcp-server-xxxxx.run.app
 
-### Consultar al Maitre Bot directamente
+## 🧪 Testing y Desarrollo
+
+### Pruebas con cURL
 
 ```bash
-# Local
-curl -X POST http://localhost:8000/query \
+# Consulta al sumiller
+curl -X POST http://localhost:8001/query \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "¿Qué vino recomiendas para una paella?"}'
+  -d '{"prompt": "¿Qué vino recomiendas para una paella?", "user_id": "test_user"}'
 
-# Cloud Run
-curl -X POST https://maitre-bot-xxxxx-uc.a.run.app/query \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "¿Qué vino recomiendas para una paella?"}'
+# Verificar RAG
+curl http://localhost:8000/search?q=tempranillo
+
+# Estado de servicios
+curl http://localhost:8001/health
+curl http://localhost:8000/health
+curl http://localhost:8002/health
 ```
 
-### Health checks
+### Interfaz de Testing
+- **Tester Web**: http://localhost:8003
+- **Logs**: `docker compose logs -f sumiller-bot`
+
+## 🎯 Características
+
+### 🤖 **Agente Sumiller**
+- **DeepSeek LLM** para respuestas naturales
+- **RAG Agéntico** con expansión de consultas
+- **Memoria conversacional** personalizada
+- **Búsqueda semántica** en base de vinos
+
+### 🔍 **RAG Avanzado**
+- **Expansión automática** de consultas
+- **Búsqueda vectorial** con ChromaDB
+- **Deduplicación** inteligente
+- **Contexto enriquecido** para mejores respuestas
+
+### 💾 **Memoria Inteligente**
+- **Preferencias de usuario** persistentes
+- **Historial conversacional** en Redis
+- **Personalización** progresiva
+
+### 🎨 **Interfaz Moderna**
+- **Vue.js** con diseño responsivo
+- **Autenticación Firebase**
+- **Chat en tiempo real**
+- **Historial de conversaciones**
+
+## 🔧 Configuración Avanzada
+
+### Variables de Entorno Principales
 
 ```bash
-# Maitre Bot
-curl http://localhost:8000/
+# API DeepSeek (requerida)
+DEEPSEEK_API_KEY=sk-xxxxx
 
-# Sumiller Bot
-curl http://localhost:8001/
+# Entorno
+ENVIRONMENT=local  # o 'cloud'
 
-# Ver platos disponibles
-curl http://localhost:8001/knowledge/dishes
+# Puertos locales
+SUMILLER_PORT=8001
+RAG_MCP_PORT=8000
+MEMORY_MCP_PORT=8002
+
+# URLs Cloud Run (producción)
+CLOUD_SUMILLER_URL=https://sumiller-bot-xxxxx.run.app
+CLOUD_RAG_MCP_URL=https://rag-mcp-server-xxxxx.run.app
 ```
 
-## Puntos de Extensión
+### Personalización
 
-El código incluye comentarios marcando donde se puede extender:
-
-1. **Mock RAG → RAG Real**: En `sumiller-bot/main.py`, función `mock_mcp_query()`
-2. **MCP Server Real**: En `sumiller-bot/main.py`, endpoint `/recommend`
-3. **Autenticación**: Agregar JWT tokens en headers A2A
-4. **Persistencia**: Reemplazar diccionarios en memoria por base de datos
-5. **Observabilidad**: Agregar OpenTelemetry para tracing distribuido
-
-## Monitoreo en Cloud Run
-
+#### Agregar Nuevos Vinos
 ```bash
-# Ver logs del Maitre Bot
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=maitre-bot" --limit 50
-
-# Ver logs del Sumiller Bot
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=sumiller-bot" --limit 50
-
-# Ver métricas
-gcloud monitoring dashboards create --config-from-file=monitoring-dashboard.json
+# Editar knowledge_base/wines.json
+# Recargar datos
+python load-wines.py
 ```
 
-## Limpieza
+#### Modificar Personalidad del Sumiller
+```python
+# En sumiller-bot/main.py, modificar system_prompt
+SUMILLER_PERSONALITY = """
+Eres Sumy, un sumiller experto con...
+"""
+```
 
+## 🐛 Troubleshooting
+
+### Problemas Comunes
+
+**❌ "DeepSeek API key not configured"**
 ```bash
-# Eliminar servicios de Cloud Run
-gcloud run services delete maitre-bot --quiet
-gcloud run services delete sumiller-bot --quiet
-gcloud run services delete sumiller-ui --quiet
-
-# Eliminar imágenes de Container Registry
-gcloud container images delete gcr.io/$PROJECT_ID/maitre-bot --quiet
-gcloud container images delete gcr.io/$PROJECT_ID/sumiller-bot --quiet
-gcloud container images delete gcr.io/$PROJECT_ID/sumiller-ui --quiet
+# Verificar .env
+cat .env | grep DEEPSEEK_API_KEY
+# Debe mostrar tu API key válida
 ```
+
+**❌ "Error al conectar con RAG MCP Server"**
+```bash
+# Verificar servicios
+docker compose ps
+curl http://localhost:8000/health
+```
+
+**❌ "No se encontraron vinos"**
+```bash
+# Recargar base de datos
+python load-wines.py
+curl http://localhost:8000/stats
+```
+
+### Logs Útiles
+```bash
+# Logs del sumiller
+docker compose logs -f sumiller-bot
+
+# Logs del RAG
+docker compose logs -f rag-mcp-server
+
+# Logs de memoria
+docker compose logs -f memory-mcp-server
+```
+
+## 📊 Monitoreo
+
+### Métricas Disponibles
+- `/health` - Estado de servicios
+- `/stats` - Estadísticas de uso
+- Redis insights para memoria
+- ChromaDB metrics para RAG
+
+### Health Checks
+```bash
+# Script de verificación completa
+./check-local.sh
+```
+
+## 🤝 Contribución
+
+1. Fork del proyecto
+2. Crear rama feature (`git checkout -b feature/nueva-funcionalidad`)
+3. Commit cambios (`git commit -am 'Agregar nueva funcionalidad'`)
+4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
+5. Crear Pull Request
+
+## 📄 Licencia
+
+Este proyecto está bajo la Licencia MIT. Ver `LICENSE` para detalles.
+
+---
+
+**💡 Consejo:** Para mejores resultados, utiliza consultas específicas como "vino tinto para carne asada" en lugar de "recomienda vino".

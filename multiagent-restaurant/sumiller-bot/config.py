@@ -70,6 +70,23 @@ class Config:
                 return f.read().strip()
         return os.getenv('OPENAI_API_KEY')
     
+    def get_deepseek_key(self):
+        """Obtiene la API key de DeepSeek de forma segura."""
+        # Prioridad: 1) Secreto montado, 2) Variable de entorno
+        secret_path = "/run/secrets/deepseek-api-key"
+        if os.path.exists(secret_path):
+            with open(secret_path, "r") as f:
+                return f.read().strip()
+        return os.getenv('DEEPSEEK_API_KEY')
+    
+    def get_deepseek_base_url(self):
+        """Obtiene la base URL de DeepSeek."""
+        return os.getenv('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
+    
+    def get_deepseek_model(self):
+        """Obtiene el modelo de DeepSeek a usar."""
+        return os.getenv('DEEPSEEK_MODEL', 'deepseek-chat')
+    
     def get_service_url(self, service_name: str) -> str:
         """Obtiene la URL de un servicio específico."""
         if service_name == 'maitre':
@@ -97,7 +114,9 @@ Config Summary:
   Maitre URL: {self.maitre_url}
   Sumiller URL: {self.sumiller_url}
   MCP Server URL: {self.mcp_server_url}
-  OpenAI Key: {'✓ Configured' if self.get_openai_key() else '✗ Missing'}
+  DeepSeek Key: {'✓ Configured' if self.get_deepseek_key() else '✗ Missing'}
+  DeepSeek Base URL: {self.get_deepseek_base_url()}
+  DeepSeek Model: {self.get_deepseek_model()}
         """.strip()
 
 # Instancia global

@@ -1,18 +1,20 @@
 # sumiller-bot/main.py
 """
-Sumiller Bot - Agente de Razonamiento y Conversación
-Utiliza ChromaDB (via mcp-server) para búsqueda semántica inteligente y OpenAI para respuestas conversacionales.
-1. Envía la consulta del usuario al mcp-server para búsqueda vectorial.
-2. Genera una respuesta conversacional basada en los vinos relevantes encontrados.
+Sumiller Bot - Agente de Razonamiento y Conversación con MCP Agentic RAG
+Utiliza el nuevo sistema MCP Agentic RAG para búsqueda semántica avanzada y generación contextual.
+1. Conecta con el RAG MCP Server para expansión agéntica de consultas.
+2. Utiliza memoria conversacional para personalización.
+3. Genera respuestas conversacionales mejoradas.
 """
-import json
 import os
 import sys
 import logging
 import httpx
+import json
 from openai import AsyncOpenAI
 from typing import List, Dict, Any
 from fastapi import FastAPI, HTTPException, Body
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Importar configuración multi-entorno
@@ -25,132 +27,372 @@ logger = logging.getLogger(__name__)
 
 # Configuración del puerto que funciona en local y Cloud Run
 PORT = int(os.getenv("PORT", str(config.sumiller_port if config.is_local() else 8080)))
-MCP_SERVER_URL = config.get_service_url('mcp')
 
-OPENAI_API_KEY = config.get_openai_key()
+# URLs de los nuevos servicios MCP Agentic RAG
+RAG_MCP_URL = os.getenv('RAG_MCP_URL', "http://localhost:8000")
+MEMORY_MCP_URL = os.getenv('MEMORY_MCP_URL', "http://localhost:8002")
 
-if not OPENAI_API_KEY:
-    logger.warning("No se pudo obtener la OpenAI API Key. Las llamadas a OpenAI no funcionarán.")
-    openai_client = None
+# Configuración DeepSeek
+DEEPSEEK_API_KEY = config.get_deepseek_key()
+DEEPSEEK_BASE_URL = config.get_deepseek_base_url()
+DEEPSEEK_MODEL = config.get_deepseek_model()
+
+if not DEEPSEEK_API_KEY:
+    logger.warning("No se pudo obtener la DeepSeek API Key. Las llamadas a DeepSeek no funcionarán.")
+    deepseek_client = None
 else:
-    openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+    # Usar el cliente OpenAI pero con la configuración de DeepSeek
+    deepseek_client = AsyncOpenAI(
+        api_key=DEEPSEEK_API_KEY,
+        base_url=DEEPSEEK_BASE_URL
+    )
+    logger.info(f"✅ Cliente DeepSeek configurado: {DEEPSEEK_BASE_URL} - Modelo: {DEEPSEEK_MODEL}")
 
 app = FastAPI(
-    title="Sumiller Bot API",
-    description="Un agente inteligente que recomienda vinos de un catálogo.",
-    version="2.0.0"
+    title="Sumiller Bot API - Agentic RAG",
+    description="Un agente inteligente con RAG agéntico que recomienda vinos personalizados.",
+    version="3.0.0"
+)
+
+# Configuración de CORS para permitir conexiones desde la UI
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # --- Modelos de Datos ---
 class Query(BaseModel):
     prompt: str
+    user_id: str = "default_user"  # Para memoria conversacional
 
 class RecommendationResponse(BaseModel):
     response: str
+    expanded_queries: List[str] = []
+    wines_found: int = 0
 
-# --- Lógica de Obtención de Datos ---
-async def search_wines_from_catalog(user_query: str) -> List[Dict[str, Any]]:
-    """Utiliza el mcp-server para hacer búsqueda semántica inteligente."""
+# --- Integración con MCP Agentic RAG ---
+
+async def search_wines_with_agentic_rag(user_query: str, user_id: str = "default_user") -> Dict[str, Any]:
+    """Utiliza el nuevo sistema MCP Agentic RAG para búsqueda semántica avanzada."""
+    logger.info(f"🔍 Iniciando búsqueda RAG para: '{user_query}'")
+    logger.info(f"🔗 URL del RAG MCP: {RAG_MCP_URL}")
+    
     async with httpx.AsyncClient() as client:
         try:
-            # Usar el nuevo endpoint de búsqueda semántica
+            # 1. Primero, obtener contexto de memoria si existe
+            logger.info("💾 Obteniendo contexto de memoria...")
+            memory_context = await get_user_memory(user_id, client)
+            logger.info(f"💾 Contexto de memoria obtenido: {bool(memory_context)}")
+            
+            # 2. Realizar búsqueda con RAG agéntico
+            rag_payload = {
+                "query": user_query,
+                "max_results": 3  # Reducido para menor latencia
+            }
+            
+            # Solo agregar contexto si existe para reducir payload
+            if memory_context:
+                rag_payload["context"] = memory_context
+            
+            logger.info(f"📤 Enviando payload a {RAG_MCP_URL}/query")
+            logger.info(f"📦 Payload: {rag_payload}")
+            
             response = await client.post(
-                f"{MCP_SERVER_URL}/search",
-                json={"query": user_query, "limit": 5},
-                timeout=10.0
+                f"{RAG_MCP_URL}/query",
+                json=rag_payload,
+                timeout=30.0  # Aumentado para búsquedas complejas
             )
+            
+            logger.info(f"📡 Respuesta recibida: status={response.status_code}")
             response.raise_for_status()
             search_result = response.json()
             
-            # Extraer la lista de vinos del resultado
-            wines = search_result.get("wines", [])
-            logger.info(f"✅ Búsqueda semántica encontró {len(wines)} vinos relevantes")
+            logger.info(f"✅ RAG Agéntico encontró {len(search_result.get('sources', []))} vinos relevantes")
+            logger.info(f"📝 Consultas expandidas: {search_result.get('expanded_queries', [])}")
             
-            return wines
+            return search_result
             
         except httpx.RequestError as e:
-            logger.error(f"Error al conectar con mcp-server: {e}")
-            raise HTTPException(status_code=503, detail="No se pudo comunicar con el catálogo de vinos.")
+            logger.error(f"Error al conectar con RAG MCP Server: {e}")
+            logger.error(f"URL intentada: {RAG_MCP_URL}/query")
+            # Fallback: búsqueda simple si RAG falla
+            return await simple_search_fallback(user_query, client)
         except httpx.HTTPStatusError as e:
-            logger.error(f"mcp-server devolvió un error: {e.response.status_code}")
-            raise HTTPException(status_code=e.response.status_code, detail="El catálogo de vinos devolvió un error.")
+            logger.error(f"RAG MCP Server devolvió un error: {e.response.status_code}")
+            logger.error(f"Respuesta del servidor: {e.response.text}")
+            return await simple_search_fallback(user_query, client)
+        except Exception as e:
+            logger.error(f"Error inesperado en RAG MCP: {e}")
+            logger.error(f"Tipo de error: {type(e)}")
+            return await simple_search_fallback(user_query, client)
 
-# --- Lógica del Agente Inteligente (Simplificada) ---
+async def get_user_memory(user_id: str, client: httpx.AsyncClient) -> Dict[str, Any]:
+    """Obtiene el contexto de memoria del usuario."""
+    try:
+        response = await client.get(
+            f"{MEMORY_MCP_URL}/memory/{user_id}",
+            timeout=5.0
+        )
+        if response.status_code == 200:
+            memory_data = response.json()
+            logger.info(f"💾 Memoria recuperada para usuario {user_id}: {len(memory_data.get('preferences', {}))} preferencias")
+            return memory_data
+        else:
+            return {}
+    except Exception as e:
+        logger.warning(f"No se pudo recuperar memoria para {user_id}: {e}")
+        return {}
 
-async def generate_conversational_response(user_query: str, filtered_wines: List[Dict[str, Any]]) -> str:
+async def save_user_interaction(user_id: str, query: str, response: str, wines: List[Dict]) -> None:
+    """Guarda la interacción en memoria para futuras personalizaciones."""
+    async with httpx.AsyncClient() as client:
+        try:
+            memory_payload = {
+                "user_id": user_id,
+                "interaction": {
+                    "query": query,
+                    "response": response,
+                    "wines_recommended": [wine.get('metadata', {}).get('name', '') for wine in wines[:3]],
+                    "timestamp": "auto"
+                }
+            }
+            
+            await client.post(
+                f"{MEMORY_MCP_URL}/memory/save",
+                json=memory_payload,
+                timeout=5.0
+            )
+            logger.info(f"💾 Interacción guardada en memoria para usuario {user_id}")
+        except Exception as e:
+            logger.warning(f"No se pudo guardar en memoria: {e}")
+
+async def simple_search_fallback(user_query: str, client: httpx.AsyncClient) -> Dict[str, Any]:
+    """Búsqueda simple de fallback si RAG agéntico no está disponible."""
+    try:
+        # Intentar búsqueda básica en el servicio RAG
+        logger.info(f"🔄 Intentando fallback con URL: {RAG_MCP_URL}/query")
+        response = await client.post(
+            f"{RAG_MCP_URL}/query",
+            json={"query": user_query, "max_results": 3},
+            timeout=20.0  # Timeout más generoso para fallback
+        )
+        logger.info(f"📡 Respuesta fallback status: {response.status_code}")
+        if response.status_code == 200:
+            result = response.json()
+            logger.info(f"✅ Fallback exitoso: {len(result.get('sources', []))} fuentes encontradas")
+            return result
+    except Exception as e:
+        logger.error(f"❌ Error en fallback: {e}")
+        logger.error(f"🔍 Tipo de error en fallback: {type(e)}")
+    
+    # Si todo falla, respuesta vacía
+    logger.warning("Fallback: No hay servicios de búsqueda disponibles")
+    return {"sources": [], "expanded_queries": [], "error": "Servicios no disponibles"}
+
+# --- Lógica del Agente Inteligente Mejorada ---
+
+async def generate_agentic_response(user_query: str, search_result: Dict[str, Any], user_id: str) -> str:
     """
-    Genera una respuesta conversacional basada en los vinos pre-filtrados por ChromaDB.
+    Genera una respuesta conversacional usando el contexto completo del RAG agéntico.
     """
-    if not openai_client:
-        return "La API de OpenAI no está configurada, pero estos son los vinos que encontré: " + json.dumps(filtered_wines)
+    if not deepseek_client:
+        return f"La API de DeepSeek no está configurada. Resultados: {json.dumps(search_result.get('sources', []))}"
 
-    if not filtered_wines:
+    documents = search_result.get('sources', [])  # RAG MCP devuelve 'sources' no 'documents'
+    expanded_queries = search_result.get('expanded_queries', [])
+    
+    if not documents:
         system_prompt = """
-        Eres un sumiller experto llamado Sumy, eres amable, cercano y empático.
-        Tu tarea es informar al usuario que no has podido encontrar un vino que coincida con su búsqueda en tu catálogo actual.
-        - Discúlpate amablemente.
-        - Explica que has buscado cuidadosamente pero no tienes la combinación perfecta para su petición.
-        - Invítale a que intente con otra descripción o tipo de vino. Sé proactivo, quizás puedas sugerirle que pida "un tinto con cuerpo" o "un blanco afrutado" para guiarle.
-        - Tu tono debe ser servicial y nunca negativo.
+        Eres Sumy, un sumiller profesional con formación completa en sumillería.
+        
+        SITUACIÓN: No encontraste vinos específicos, pero puedes ofrecer conocimiento profesional.
+        
+        RESPUESTA SEGÚN TIPO DE CONSULTA:
+        
+        A) SI BUSCA TEORÍA/CONOCIMIENTO:
+        - Explica el concepto usando tu formación profesional
+        - Enseña principios de sumillería relevantes
+        - Usa terminología técnica apropiada
+        - Ofrece consejos prácticos
+        
+        B) SI BUSCA VINOS ESPECÍFICOS:
+        - Discúlpate por no encontrar vinos exactos
+        - Explica qué características debería buscar según principios de maridaje
+        - Sugiere términos alternativos basados en tu conocimiento
+        - Ofrece principios generales que aplican a su búsqueda
+        
+        REGLAS:
+        - Mantén tono profesional y educativo
+        - Siempre aporta valor con conocimiento teórico
+        - Usa tu formación para guiar al usuario
         """
-        user_content = f"Mi consulta fue: \"{user_query}\""
+        user_content = f"Consulta original: \"{user_query}\"\nConsultas expandidas probadas: {expanded_queries}"
     else:
         system_prompt = """
-        Eres Sumy, un sumiller experto. Responde de forma concisa y precisa.
+        Eres Sumy, un sumiller profesional con IA agéntica avanzada y formación completa en sumillería.
         
+        CAPACIDADES PROFESIONALES:
+        - Dominas los fundamentos del vino (taninos, acidez, aromas, cuerpo)
+        - Conoces técnicas de cata profesional (5 sentidos, fases de cata)
+        - Aplicas principios de maridaje (intensidad, sabor, textura, acidez)
+        - Manejas temperaturas de servicio y conservación
+        - Conoces regiones vitivinícolas y sus características
+        - Tu sistema expandió la consulta para mejores resultados
+        
+        TIPOS DE CONSULTA Y RESPUESTA:
+        
+        A) SALUDOS Y CONVERSACIÓN GENERAL:
+        Si la consulta es un saludo, pregunta general, o no especifica vinos:
+        - Responde de forma amable y profesional
+        - Preséntate brevemente como Sumy, el sumiller virtual
+        - Indica en qué puedes ayudar (recomendaciones, maridajes, teoría)
+        - NO uses marcadores de estructura
+        
+        B) CONSULTAS DE TEORÍA/FORMACIÓN:
+        [PRINCIPIO]
+        Explica conceptos de sumillería con fundamentos teóricos completos
+        [/PRINCIPIO]
+        
+        C) RECOMENDACIONES DE VINOS:
+        [PRINCIPIO]
+        Explica brevemente el principio o fundamento aplicado (máximo 2 líneas)
+        [/PRINCIPIO]
+
+        [RECOMENDACION_1]
+        **Nombre del Vino** (Región) - €precio
+        Justificación técnica concisa basada en características específicas
+        Temperatura de servicio: X°C
+        [/RECOMENDACION_1]
+
         REGLAS ESTRICTAS:
-        - Usa ÚNICAMENTE los vinos de la lista JSON proporcionada
-        - NO inventes nombres, precios, descripciones o características
-        - Respuesta máxima: 3-4 líneas por vino
-        - Menciona EXACTAMENTE: nombre, precio, región, por qué es ideal
-        - Si hay varios vinos, recomienda máximo 2-3
-        - Sé directo y útil, sin texto decorativo excesivo
-        
-        FORMATO:
-        • **Nombre del Vino** (Región) - €precio
-          Perfecto para [motivo específico basado en pairing/descripción]
+        - Para recomendaciones: SOLO 1 vino (el mejor)
+        - Para teoría: usa solo [PRINCIPIO]
+        - Para saludos: respuesta natural sin marcadores
+        - Cada recomendación debe ser concisa (2-3 líneas máximo)
+        - SIEMPRE incluye temperatura de servicio en recomendaciones
         """
-        user_content = f"Mi consulta original fue: \"{user_query}\"\n\nEstos son los vinos que mi sistema de búsqueda inteligente encontró como más relevantes:\n{json.dumps(filtered_wines, indent=2, ensure_ascii=False)}"
+        
+        # Separar vinos de teoría en los resultados
+        wine_docs = [doc for doc in documents if doc.get('metadata', {}).get('doc_type') != 'teoria_sumiller']
+        theory_docs = [doc for doc in documents if doc.get('metadata', {}).get('doc_type') == 'teoria_sumiller']
+        
+        user_content = f"""
+        Consulta original: "{user_query}"
+        Mi sistema agéntico expandió la búsqueda a: {expanded_queries}
+        
+        CONOCIMIENTO TEÓRICO RELEVANTE:
+        {json.dumps(theory_docs, indent=2, ensure_ascii=False) if theory_docs else "Sin teoría específica encontrada"}
+        
+        VINOS ENCONTRADOS:
+        {json.dumps(wine_docs, indent=2, ensure_ascii=False) if wine_docs else "Sin vinos específicos encontrados"}
+        
+        INSTRUCCIONES:
+        - Si hay teoría relevante, úsala para explicar conceptos y justificar recomendaciones
+        - Si hay vinos, explica por qué son adecuados usando principios profesionales
+        - Combina ambos para dar una respuesta completa y educativa
+        """
     
     try:
-        response = await openai_client.chat.completions.create(
-            model="gpt-4-turbo",
+        response = await deepseek_client.chat.completions.create(
+            model=DEEPSEEK_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content}
             ],
             temperature=0.3,
-            max_tokens=200
+            max_tokens=300
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        logger.error(f"Error al generar respuesta conversacional con OpenAI: {e}")
-        raise HTTPException(status_code=500, detail="Tuve problemas para generar una respuesta creativa.")
+        logger.error(f"Error al generar respuesta agéntica con DeepSeek: {e}")
+        # Fallback response
+        if documents:
+            return f"Encontré {len(documents)} vinos relevantes: " + ", ".join([doc.get('metadata', {}).get('name', 'Sin nombre') for doc in documents[:3]])
+        else:
+            return "No encontré vinos que coincidan con tu búsqueda. ¿Podrías ser más específico?"
 
-# --- Endpoint Principal ---
+# --- Endpoint Principal Actualizado ---
 @app.post("/query", response_model=RecommendationResponse)
-async def handle_query(query: Query = Body(...)):
+async def handle_agentic_query(query: Query = Body(...)):
     """
-    Orquesta el flujo de recomendación de vinos usando búsqueda vectorial.
+    Orquesta el flujo de recomendación usando RAG agéntico avanzado.
     """
     user_prompt = query.prompt
-    logger.info(f"Recibida nueva consulta: \"{user_prompt}\"")
+    user_id = query.user_id
+    logger.info(f"🧠 Nueva consulta agéntica de {user_id}: \"{user_prompt}\"")
 
-    # 1. Búsqueda semántica inteligente via mcp-server
-    relevant_wines = await search_wines_from_catalog(user_prompt)
-    if not relevant_wines:
-        logger.info("No se encontraron vinos relevantes, generando respuesta de disculpa")
+    # 1. Búsqueda con RAG agéntico
+    try:
+        logger.info("🔄 Llamando a search_wines_with_agentic_rag...")
+        search_result = await search_wines_with_agentic_rag(user_prompt, user_id)
+        logger.info("✅ search_wines_with_agentic_rag completado")
+    except Exception as e:
+        logger.error(f"💥 Error en search_wines_with_agentic_rag: {e}")
+        logger.error(f"🔍 Tipo de error: {type(e)}")
+        # Fallback directo
+        search_result = {"sources": [], "expanded_queries": [], "error": str(e)}
     
-    # 2. Generar respuesta conversacional
-    logger.info("Generando respuesta conversacional final...")
-    conversational_response = await generate_conversational_response(user_prompt, relevant_wines)
+    wines_found = len(search_result.get('sources', []))
+    expanded_queries = search_result.get('expanded_queries', [])
     
-    return RecommendationResponse(response=conversational_response)
+    # 2. Generar respuesta conversacional agéntica
+    logger.info("🤖 Generando respuesta con IA agéntica...")
+    conversational_response = await generate_agentic_response(user_prompt, search_result, user_id)
+    
+    # 3. Guardar interacción en memoria para futuras consultas
+    await save_user_interaction(user_id, user_prompt, conversational_response, search_result.get('sources', []))
+    
+    return RecommendationResponse(
+        response=conversational_response,
+        expanded_queries=expanded_queries,
+        wines_found=wines_found
+    )
 
 @app.get("/health")
 async def health_check():
     """Endpoint de salud del servicio."""
-    return {"status": "healthy"}
+    try:
+        # Verificar conectividad con servicios MCP
+        async with httpx.AsyncClient() as client:
+            rag_health = await client.get(f"{RAG_MCP_URL}/health", timeout=3.0)
+            memory_health = await client.get(f"{MEMORY_MCP_URL}/health", timeout=3.0)
+            
+            return {
+                "status": "healthy",
+                "services": {
+                    "rag_mcp": rag_health.status_code == 200,
+                    "memory_mcp": memory_health.status_code == 200,
+                    "deepseek": deepseek_client is not None
+                }
+            }
+    except Exception as e:
+        return {
+            "status": "degraded", 
+            "error": str(e),
+            "services": {
+                "rag_mcp": False,
+                "memory_mcp": False,
+                "deepseek": deepseek_client is not None
+            }
+        }
+
+@app.get("/stats")
+async def get_stats():
+    """Estadísticas del sumiller agéntico."""
+    try:
+        async with httpx.AsyncClient() as client:
+            rag_stats = await client.get(f"{RAG_MCP_URL}/stats", timeout=5.0)
+            memory_stats = await client.get(f"{MEMORY_MCP_URL}/stats", timeout=5.0)
+            
+            return {
+                "rag_stats": rag_stats.json() if rag_stats.status_code == 200 else {},
+                "memory_stats": memory_stats.json() if memory_stats.status_code == 200 else {}
+            }
+    except Exception as e:
+        return {"error": f"No se pudieron obtener estadísticas: {e}"}
 
 if __name__ == "__main__":
     import uvicorn

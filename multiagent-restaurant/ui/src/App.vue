@@ -40,7 +40,7 @@
         <div v-for="message in messages" :key="message.id" class="flex items-end gap-3" :class="message.role === 'user' ? 'justify-end' : 'justify-start'">
           <!-- Avatar del Bot -->
           <div v-if="message.role === 'bot'" class="w-10 h-10 rounded-full bg-brand-dark flex items-center justify-center text-white font-serif text-xl flex-shrink-0">
-            M
+            S
           </div>
           <!-- Burbuja de Mensaje -->
           <div class="py-3 px-5 rounded-2xl max-w-lg shadow-md" :class="{
@@ -54,7 +54,7 @@
   
         <!-- Indicador de Carga -->
         <div v-if="isLoading" class="flex items-end gap-3 justify-start">
-           <div class="w-10 h-10 rounded-full bg-brand-dark flex items-center justify-center text-white font-serif text-xl flex-shrink-0">M</div>
+           <div class="w-10 h-10 rounded-full bg-brand-dark flex items-center justify-center text-white font-serif text-xl flex-shrink-0">S</div>
             <div class="py-3 px-5 rounded-2xl bg-white shadow-md">
                 <div class="flex items-center space-x-2">
                     <div class="w-2 h-2 bg-brand-gray rounded-full animate-bounce" style="animation-delay: -0.3s;"></div>
@@ -198,19 +198,34 @@ const sendMessage = async () => {
 
   try {
     const token = await user.value.getIdToken()
-    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'https://maitre-bot-rkhznukoea-ew.a.run.app/query'
+    // Forzar uso de proxy en todas las configuraciones
+    const apiUrl = '/api/query'
 
-    const result = await axios.post(apiUrl, { prompt: query }, {
+    const result = await axios.post(apiUrl, { 
+      prompt: query,
+      user_id: user.value.uid || 'anonymous_user'
+    }, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     
     const botResponse = result.data.response;
 
-    messages.value.push({
-      id: Date.now() + 1,
-      role: 'bot',
-      text: botResponse
-    })
+    // Procesar respuesta estructurada del sumiller
+    const structuredMessages = parseStructuredResponse(botResponse);
+    
+    // Agregar mensajes de forma secuencial
+    for (const msgText of structuredMessages) {
+      messages.value.push({
+        id: Date.now() + Math.random(),
+        role: 'bot',
+        text: msgText
+      });
+      
+      // Pequeña pausa para efecto de escritura
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await nextTick();
+      scrollToBottom();
+    }
 
     await saveConversationToFirestore(query, botResponse);
 
@@ -239,6 +254,32 @@ const scrollToBottom = () => {
 // --- Utilidades ---
 const renderMarkdown = (text) => {
   return marked(text || '', { breaks: true, gfm: true });
+}
+
+const parseStructuredResponse = (response) => {
+  if (!response) return [response];
+  
+  const messages = [];
+  
+  // Buscar sección de principio
+  const principioMatch = response.match(/\[PRINCIPIO\](.*?)\[\/PRINCIPIO\]/s);
+  if (principioMatch) {
+    messages.push(principioMatch[1].trim());
+  }
+  
+  // Buscar solo la primera recomendación
+  const regex = /\[RECOMENDACION_1\](.*?)\[\/RECOMENDACION_1\]/s;
+  const match = response.match(regex);
+  if (match) {
+    messages.push(`🍷 **Mi Recomendación**\n\n${match[1].trim()}`);
+  }
+  
+  // Si no hay estructura, devolver respuesta completa (para saludos y conversación general)
+  if (messages.length === 0) {
+    return [response];
+  }
+  
+  return messages;
 }
 
 const appName = computed(() => "Sumy")

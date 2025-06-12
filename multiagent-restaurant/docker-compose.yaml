@@ -1,81 +1,173 @@
-# docker-compose.yaml
+# docker-compose.yaml - Sistema MCP Agentic RAG
 version: '3.8'
 
 services:
-  maitre-bot:
-    build: ./maitre-bot
+  # ======================
+  # SERVICIOS MCP AGENTIC RAG
+  # ======================
+  
+  # Servidor RAG MCP Principal
+  rag-mcp-server:
+    build:
+      context: ./mcp-agentic-rag
+      dockerfile: ./docker/Dockerfile.rag-server
     ports:
       - "8000:8000"
     environment:
       - ENVIRONMENT=local
-      - PORT=8000
-      - MAITRE_PORT=8000
-      - SUMILLER_PORT=8001
-      - MCP_SERVER_PORT=8002
-      # Variables Firebase (opcionales - para autenticación)
-      - FIREBASE_PRIVATE_KEY_ID=${FIREBASE_PRIVATE_KEY_ID:-}
-      - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY:-}
-      - FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL:-}
-      - FIREBASE_CLIENT_ID=${FIREBASE_CLIENT_ID:-}
-      - FIREBASE_CERT_URL=${FIREBASE_CERT_URL:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL}
+      - VECTOR_DB_TYPE=chroma
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - RAG_MCP_PORT=8000
     volumes:
-      - ./config.py:/app/config.py:ro
+      - ./mcp-agentic-rag/data:/app/data
+      - ./mcp-agentic-rag/knowledge_base:/app/knowledge_base
+      - chromadb_data:/app/.chromadb
+    depends_on:
+      - chromadb
     networks:
       - agent-network
-    depends_on:
-      - sumiller-bot
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
+  # Base de datos vectorial ChromaDB
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8004:8000"  # Puerto externo diferente para evitar conflictos
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ALLOW_RESET=true
+    volumes:
+      - chromadb_data:/chroma/chroma
+    networks:
+      - agent-network
+
+  # Servidor de memoria MCP
+  memory-mcp-server:
+    build:
+      context: ./mcp-agentic-rag
+      dockerfile: ./docker/Dockerfile.memory-server
+    ports:
+      - "8002:8000"
+    environment:
+      - ENVIRONMENT=local
+      - REDIS_URL=redis://redis:6379
+      - MEMORY_MCP_PORT=8002
+    depends_on:
+      - redis
+    networks:
+      - agent-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis para memoria persistente
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - agent-network
+    command: redis-server --appendonly yes
+
+  # ======================
+  # SERVICIO PRINCIPAL ÚNICO
+  # ======================
+
+  # Sumiller Bot Agéntico (ÚNICO BOT - No hay maitre-bot)
   sumiller-bot:
-    build: ./sumiller-bot
+    build: 
+      context: ./sumiller-bot
+      dockerfile: Dockerfile
     ports:
       - "8001:8001"
     environment:
       - ENVIRONMENT=local
       - PORT=8001
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - MAITRE_PORT=8000
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL}
       - SUMILLER_PORT=8001
-      - MCP_SERVER_PORT=8002
+      - RAG_MCP_PORT=8000
+      - MEMORY_MCP_PORT=8002
+      - CLOUD_RAG_MCP_URL=http://rag-mcp-server:8000
+      - CLOUD_MEMORY_MCP_URL=http://memory-mcp-server:8000
+      - RAG_MCP_URL=http://rag-mcp-server:8000
+      - MEMORY_MCP_URL=http://memory-mcp-server:8000
     volumes:
       - ./config.py:/app/config.py:ro
-      - chromadb_data:/app/.chromadb
     networks:
       - agent-network
     depends_on:
-      - mcp-server
+      - rag-mcp-server
+      - memory-mcp-server
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  mcp-server:
-    build: ./mcp-server
-    ports:
-      - "8002:8002"
-    environment:
-      - ENVIRONMENT=local
-      - PORT=8002
-      - MAITRE_PORT=8000
-      - SUMILLER_PORT=8001
-      - MCP_SERVER_PORT=8002
-    volumes:
-      - ./config.py:/app/config.py:ro
-      - chromadb_data:/app/.chromadb
-    networks:
-      - agent-network
-
+  # UI Frontend - Llama directamente al sumiller-bot
   ui:
-    build: ./ui
+    build: 
+      context: ./ui
+      dockerfile: Dockerfile
     ports:
       - "3000:80"
     environment:
       - ENVIRONMENT=local
-      - VITE_MAITRE_URL=http://localhost:8000
+      - VITE_API_BASE_URL=http://localhost:8001/query
       - UI_PORT=3000
     depends_on:
-      - maitre-bot
+      - sumiller-bot
+    networks:
+      - agent-network
+
+  # ======================
+  # SERVICIOS DE DESARROLLO
+  # ======================
+
+  # Tester interactivo MCP
+  mcp-tester:
+    build:
+      context: ./mcp-agentic-rag
+      dockerfile: ./docker/Dockerfile.tester
+    ports:
+      - "8003:8000"
+    environment:
+      - RAG_SERVER_URL=http://rag-mcp-server:8000
+      - MEMORY_SERVER_URL=http://memory-mcp-server:8000
+      - SUMILLER_URL=http://sumiller-bot:8001
+    depends_on:
+      - rag-mcp-server
+      - memory-mcp-server
+      - sumiller-bot
+    volumes:
+      - ./mcp-agentic-rag/test_data:/app/test_data
     networks:
       - agent-network
 
 networks:
   agent-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
 volumes:
   chromadb_data:
+    driver: local
+  redis_data:
+    driver: local

@@ -9,6 +9,7 @@ import sys
 import json
 import asyncio
 import logging
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
@@ -518,14 +519,93 @@ async def health_check():
     """Verificación de salud"""
     return {"status": "healthy", "vector_db": VECTOR_DB_TYPE}
 
-@app.post("/query", response_model=RAGResponse)
-async def query_endpoint(request: QueryRequest):
-    """Endpoint HTTP para consultas RAG"""
-    return await rag_engine.agentic_rag_query(
-        request.query,
-        request.context,
-        request.max_results
-    )
+@app.post("/query")
+async def query_rag_mcp(query_data: QueryRequest):
+    start_total = time.time()
+    logger.info(f"Received query: {query_data.query}")
+
+    try:
+        # Asegurar que rag_engine esté inicializado
+        if rag_engine.collection is None:
+            await rag_engine.initialize()
+
+        # Paso 1: Obtener embeddings de la consulta
+        start_embedding = time.time()
+        query_embedding = rag_engine._embed_text(query_data.query)
+        end_embedding = time.time()
+        logger.info(f"Tiempo para obtener embedding de la consulta: {end_embedding - start_embedding:.4f}s")
+
+        # Paso 2: Buscar documentos relevantes en ChromaDB
+        start_chroma_search = time.time()
+        results = rag_engine.collection.query(
+            query_embeddings=[query_embedding],
+            n_results=query_data.max_results,
+            include=['documents', 'metadatas', 'distances']
+        )
+        end_chroma_search = time.time()
+        logger.info(f"Tiempo para buscar en ChromaDB: {end_chroma_search - start_chroma_search:.4f}s")
+
+        # Procesar resultados
+        documents = results['documents'][0] if results and 'documents' in results else []
+        metadatas = results['metadatas'][0] if results and 'metadatas' in results else []
+        distances = results['distances'][0] if results and 'distances' in results else []
+
+        # Construir fuentes
+        sources = []
+        context_str = ""
+        for i, (doc_content, metadata, distance) in enumerate(zip(documents, metadatas, distances)):
+            source_entry = {
+                "content": doc_content,
+                "metadata": metadata,
+                "relevance_score": 1 - distance,
+                "rank": i + 1
+            }
+            sources.append(source_entry)
+            context_str += f"Fuente {i+1}:\n{doc_content}\n\n"
+
+        # Paso 3: Generar respuesta usando DeepSeek
+        start_deepseek_call = time.time()
+        
+        if rag_engine.deepseek_client:
+            messages = [
+                {"role": "system", "content": "Eres un asistente sumiller experto. Usa el contexto proporcionado para responder a las preguntas sobre vinos. Si no puedes encontrar la respuesta en el contexto, indica que no tienes esa información. No alucines."},
+                {"role": "user", "content": f"Contexto:\n{context_str}\n\nPregunta: {query_data.query}"}
+            ]
+            
+            response = rag_engine.deepseek_client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1024,
+                top_p=1,
+                frequency_penalty=0,
+                presence_penalty=0,
+                stream=False
+            )
+            
+            llm_answer = response.choices[0].message.content if response.choices else "No se pudo obtener una respuesta del modelo."
+        else:
+            llm_answer = f"Basado en {len(sources)} fuentes encontradas para: '{query_data.query}'"
+        
+        end_deepseek_call = time.time()
+        logger.info(f"Tiempo para la llamada a DeepSeek: {end_deepseek_call - start_deepseek_call:.4f}s")
+
+        end_total = time.time()
+        logger.info(f"Tiempo total de la solicitud /query: {end_total - start_total:.4f}s")
+
+        return {
+            "answer": llm_answer,
+            "sources": sources,
+            "context_used": {"query": query_data.query, "context": context_str}
+        }
+
+    except Exception as e:
+        logger.error(f"Error en /query: {e}")
+        return {
+            "answer": f"Error procesando consulta: {str(e)}",
+            "sources": [],
+            "context_used": {"query": query_data.query, "error": str(e)}
+        }
 
 @app.post("/documents")
 async def add_document_endpoint(request: DocumentRequest):
@@ -536,21 +616,3 @@ async def add_document_endpoint(request: DocumentRequest):
         request.doc_id
     )
     return {"doc_id": doc_id, "status": "added"}
-
-async def main():
-    """Función principal"""
-    if len(sys.argv) > 1 and sys.argv[1] == "http":
-        # Modo HTTP
-        uvicorn.run(app, host="0.0.0.0", port=8000)
-    else:
-        # Modo MCP stdio
-        await rag_engine.initialize()
-        async with stdio_server() as (read_stream, write_stream):
-            await mcp_server.run(
-                read_stream,
-                write_stream,
-                mcp_server.create_initialization_options()
-            )
-
-if __name__ == "__main__":
-    asyncio.run(main())

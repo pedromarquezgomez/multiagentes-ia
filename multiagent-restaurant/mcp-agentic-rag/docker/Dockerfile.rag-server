@@ -14,8 +14,9 @@ COPY requirements.txt .
 # Instalar dependencias Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar código fuente
-COPY rag_mcp_server.py .
+# Copiar código fuente simplificado y script de inicio
+COPY rag_mcp_server_simple.py ./rag_mcp_server_simple.py
+COPY start_server.py ./start_server.py
 COPY knowledge_base/ ./knowledge_base/
 
 # Crear directorios necesarios
@@ -24,5 +25,5 @@ RUN mkdir -p /app/data /app/knowledge_base
 # Exponer puerto
 EXPOSE 8000
 
-# Comando por defecto
-CMD ["uvicorn", "rag_mcp_server:app", "--host", "0.0.0.0", "--port", "8000"]
+# Comando por defecto - usar el script de inicio
+CMD ["python", "start_server.py"]

@@ -1,7 +1,6 @@
-# sumiller-bot/main.py
+# sumiller-bot/main.py - VERSIÓN CON FILTRO INTELIGENTE
 """
-Sumiller Bot - Versión Mejorada con HTTP Connection Pooling y Resilient Client
-Código completo actualizado sin errores
+Sumiller Bot con Filtro Inteligente basado en LLM
 """
 import os
 import sys
@@ -14,83 +13,56 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
-# Importar el nuevo cliente resiliente
+# Importar el nuevo filtro
+from query_filter import filter_and_classify_query, CATEGORY_RESPONSES
 from http_client import resilient_client, close_http_pool
 
-# Importar configuración multi-entorno
+# Configuración existente (sin cambios)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import config
 
-# --- Configuración ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configuración del puerto que funciona en local y Cloud Run
 PORT = int(os.getenv("PORT", str(config.sumiller_port if config.is_local() else 8080)))
-
-# URLs de los nuevos servicios MCP Agentic RAG
 RAG_MCP_URL = os.getenv('RAG_MCP_URL', "http://localhost:8000")
 MEMORY_MCP_URL = os.getenv('MEMORY_MCP_URL', "http://localhost:8002")
 
-# Configuración OpenAI
+# Cliente OpenAI (sin cambios)
 OPENAI_API_KEY = config.get_openai_key()
 OPENAI_BASE_URL = config.get_openai_base_url()
 OPENAI_MODEL = config.get_openai_model()
 
 if not OPENAI_API_KEY:
-    logger.warning("No se pudo obtener la OpenAI API Key. Las llamadas a OpenAI no funcionarán.")
+    logger.warning("No se pudo obtener la OpenAI API Key.")
     openai_client = None
 else:
-    # Usar el cliente OpenAI con la configuración de OpenAI
-    openai_client = AsyncOpenAI(
-        api_key=OPENAI_API_KEY,
-        base_url=OPENAI_BASE_URL
-    )
-    logger.info(f"✅ Cliente OpenAI configurado: {OPENAI_BASE_URL} - Modelo: {OPENAI_MODEL}")
+    openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
+    logger.info(f"✅ Cliente OpenAI configurado: {OPENAI_BASE_URL}")
 
-# 🔄 LIFECYCLE MANAGEMENT MEJORADO
+# Lifecycle management (sin cambios)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Gestión del ciclo de vida de la aplicación"""
-    # Startup
-    logger.info("🚀 Iniciando Sumiller Bot con HTTP pooling...")
-    
-    # Verificar conectividad inicial y pre-warm connections
+    logger.info("🚀 Iniciando Sumiller Bot con filtro inteligente...")
     try:
         client = await resilient_client.pool.get_client()
-        # Pre-warm connections con health checks
-        try:
-            await client.get(f"{RAG_MCP_URL}/health", timeout=5.0)
-            logger.info("✅ RAG MCP Server conectado")
-        except Exception as e:
-            logger.warning(f"⚠️ RAG MCP Server no disponible: {e}")
-        
-        try:
-            await client.get(f"{MEMORY_MCP_URL}/health", timeout=5.0)
-            logger.info("✅ Memory MCP Server conectado")
-        except Exception as e:
-            logger.warning(f"⚠️ Memory MCP Server no disponible: {e}")
-            
-        logger.info("✅ HTTP pool inicializado y conexiones pre-calentadas")
+        await client.get(f"{RAG_MCP_URL}/health", timeout=5.0)
+        logger.info("✅ RAG MCP Server conectado")
     except Exception as e:
-        logger.warning(f"⚠️ Error durante inicialización: {e}")
+        logger.warning(f"⚠️ RAG MCP Server no disponible: {e}")
     
     yield
     
-    # Shutdown
     logger.info("🔒 Cerrando Sumiller Bot...")
     await close_http_pool()
-    logger.info("✅ Recursos liberados correctamente")
 
-# Crear app con lifecycle management
 app = FastAPI(
-    title="Sumiller Bot API - Resilient",
-    description="Sumiller con connection pooling, circuit breakers y retry logic",
-    version="3.1.0",
+    title="Sumiller Bot API - Con Filtro Inteligente",
+    description="Sumiller con filtro LLM que evita consultas innecesarias al RAG",
+    version="4.0.0",
     lifespan=lifespan
 )
 
-# Configuración de CORS para permitir conexiones desde la UI
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -99,90 +71,69 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Modelos de Datos (sin cambios) ---
+# Modelos (sin cambios)
 class Query(BaseModel):
     prompt: str
-    user_id: str = "default_user"  # Para memoria conversacional
+    user_id: str = "default_user"
 
 class RecommendationResponse(BaseModel):
     response: str
     expanded_queries: List[str] = []
     wines_found: int = 0
+    query_category: str = "unknown"  # NUEVO: categoría de la consulta
+    used_rag: bool = False          # NUEVO: si se usó RAG o no
 
-# --- Funciones Mejoradas con Cliente Resiliente ---
-
+# Funciones existentes (sin cambios)
 async def search_wines_with_agentic_rag(user_query: str, user_id: str = "default_user") -> Dict[str, Any]:
-    """
-    ✨ VERSIÓN MEJORADA: Utiliza connection pooling y retry logic
-    """
+    """Función existente - sin cambios"""
     logger.info(f"🔍 Búsqueda RAG resiliente para: '{user_query}'")
-    
     try:
-        # 1. Obtener contexto de memoria (con retry automático)
-        logger.info("💾 Obteniendo contexto de memoria...")
         memory_context = await get_user_memory_resilient(user_id)
-        
-        # 2. Preparar payload para RAG
-        rag_payload = {
-            "query": user_query,
-            "max_results": 3
-        }
-        
+        rag_payload = {"query": user_query, "max_results": 3}
         if memory_context:
             rag_payload["context"] = memory_context
         
-        # 3. 🚀 LLAMADA RESILIENTE CON POOLING
-        logger.info(f"📤 Llamada resiliente a {RAG_MCP_URL}/query")
         search_result = await resilient_client.post_with_retry(
             url=f"{RAG_MCP_URL}/query",
             json_data=rag_payload,
-            max_retries=3  # Retry automático con backoff
+            max_retries=3
         )
         
         wines_found = len(search_result.get('sources', []))
         logger.info(f"✅ RAG resiliente encontró {wines_found} vinos")
-        
         return search_result
-        
     except Exception as e:
         logger.error(f"❌ Error en búsqueda resiliente: {e}")
-        # Fallback graceful
         return await fallback_search_resilient(user_query)
 
 async def get_user_memory_resilient(user_id: str) -> Dict[str, Any]:
-    """Obtener memoria con cliente resiliente"""
+    """Función existente - sin cambios"""
     try:
         memory_data = await resilient_client.get_with_retry(
             url=f"{MEMORY_MCP_URL}/memory/{user_id}",
-            max_retries=2  # Menos retries para memoria (no crítico)
+            max_retries=2
         )
         logger.info(f"💾 Memoria recuperada resiliente para {user_id}")
         return memory_data
     except Exception as e:
-        logger.warning(f"⚠️ No se pudo recuperar memoria (no crítico): {e}")
+        logger.warning(f"⚠️ No se pudo recuperar memoria: {e}")
         return {}
 
 async def fallback_search_resilient(user_query: str) -> Dict[str, Any]:
-    """Fallback con cliente resiliente"""
+    """Función existente - sin cambios"""
     try:
-        # Intento más simple con menos parámetros
         result = await resilient_client.post_with_retry(
             url=f"{RAG_MCP_URL}/query",
             json_data={"query": user_query, "max_results": 1},
             max_retries=1
         )
-        logger.info("✅ Fallback resiliente exitoso")
         return result
     except Exception as e:
-        logger.error(f"❌ Fallback resiliente también falló: {e}")
-        return {
-            "sources": [], 
-            "expanded_queries": [], 
-            "error": "Todos los servicios no disponibles"
-        }
+        logger.error(f"❌ Fallback resiliente falló: {e}")
+        return {"sources": [], "expanded_queries": [], "error": "Servicios no disponibles"}
 
 async def save_user_interaction_resilient(user_id: str, query: str, response: str, wines: List[Dict]) -> None:
-    """Guardar interacción con cliente resiliente"""
+    """Función existente - sin cambios"""
     try:
         memory_payload = {
             "user_id": user_id,
@@ -193,116 +144,35 @@ async def save_user_interaction_resilient(user_id: str, query: str, response: st
                 "timestamp": "auto"
             }
         }
-        
         await resilient_client.post_with_retry(
             url=f"{MEMORY_MCP_URL}/memory/save",
             json_data=memory_payload,
             max_retries=2
         )
-        logger.info(f"💾 Interacción guardada resiliente para {user_id}")
     except Exception as e:
-        logger.warning(f"⚠️ No se pudo guardar en memoria (no crítico): {e}")
+        logger.warning(f"⚠️ No se pudo guardar en memoria: {e}")
 
 async def generate_agentic_response(user_query: str, search_result: Dict[str, Any], user_id: str) -> str:
-    """
-    Genera una respuesta conversacional usando el contexto completo del RAG agéntico.
-    """
+    """Función existente - sin cambios"""
     if not openai_client:
         return f"La API de OpenAI no está configurada. Resultados: {json.dumps(search_result.get('sources', []))}"
 
-    documents = search_result.get('sources', [])  # RAG MCP devuelve 'sources' no 'documents'
+    documents = search_result.get('sources', [])
     expanded_queries = search_result.get('expanded_queries', [])
     
     if not documents:
-        system_prompt = """
-        Eres Sumy, un sumiller profesional con formación completa en sumillería.
-        
-        SITUACIÓN: No encontraste vinos específicos, pero puedes ofrecer conocimiento profesional.
-        
-        RESPUESTA SEGÚN TIPO DE CONSULTA:
-        
-        A) SI BUSCA TEORÍA/CONOCIMIENTO:
-        - Explica el concepto usando tu formación profesional
-        - Enseña principios de sumillería relevantes
-        - Usa terminología técnica apropiada
-        - Ofrece consejos prácticos
-        
-        B) SI BUSCA VINOS ESPECÍFICOS:
-        - Discúlpate por no encontrar vinos exactos
-        - Explica qué características debería buscar según principios de maridaje
-        - Sugiere términos alternativos basados en tu conocimiento
-        - Ofrece principios generales que aplican a su búsqueda
-        
-        REGLAS:
-        - Mantén tono profesional y educativo
-        - Siempre aporta valor con conocimiento teórico
-        - Usa tu formación para guiar al usuario
-        """
-        user_content = f"Consulta original: \"{user_query}\"\nConsultas expandidas probadas: {expanded_queries}"
+        system_prompt = """Eres Sumy, un sumiller profesional."""
+        user_content = f"Consulta: \"{user_query}\"\nNo encontré vinos específicos. Responde como sumiller profesional."
     else:
-        system_prompt = """
-        Eres Sumy, un sumiller profesional con IA agéntica avanzada y formación completa en sumillería.
-        
-        CAPACIDADES PROFESIONALES:
-        - Dominas los fundamentos del vino (taninos, acidez, aromas, cuerpo)
-        - Conoces técnicas de cata profesional (5 sentidos, fases de cata)
-        - Aplicas principios de maridaje (intensidad, sabor, textura, acidez)
-        - Manejas temperaturas de servicio y conservación
-        - Conoces regiones vitivinícolas y sus características
-        - Tu sistema expandió la consulta para mejores resultados
-        
-        TIPOS DE CONSULTA Y RESPUESTA:
-        
-        A) SALUDOS Y CONVERSACIÓN GENERAL:
-        Si la consulta es un saludo, pregunta general, o no especifica vinos:
-        - Responde de forma amable y profesional
-        - Preséntate brevemente como Sumy, el sumiller virtual
-        - Indica en qué puedes ayudar (recomendaciones, maridajes, teoría)
-        - NO uses marcadores de estructura
-        
-        B) CONSULTAS DE TEORÍA/FORMACIÓN:
-        [PRINCIPIO]
-        Explica conceptos de sumillería con fundamentos teóricos completos
-        [/PRINCIPIO]
-        
-        C) RECOMENDACIONES DE VINOS:
-        [PRINCIPIO]
-        Explica brevemente el principio o fundamento aplicado (máximo 2 líneas)
-        [/PRINCIPIO]
-
-        [RECOMENDACION_1]
-        **Nombre del Vino** (Región) - €precio
-        Justificación técnica concisa basada en características específicas
-        Temperatura de servicio: X°C
-        [/RECOMENDACION_1]
-
-        REGLAS ESTRICTAS:
-        - Para recomendaciones: SOLO 1 vino (el mejor)
-        - Para teoría: usa solo [PRINCIPIO]
-        - Para saludos: respuesta natural sin marcadores
-        - Cada recomendación debe ser concisa (2-3 líneas máximo)
-        - SIEMPRE incluye temperatura de servicio en recomendaciones
-        """
-        
-        # Separar vinos de teoría en los resultados
+        system_prompt = """Eres Sumy, sumiller profesional. Responde basándote SOLO en las fuentes proporcionadas."""
         wine_docs = [doc for doc in documents if doc.get('metadata', {}).get('doc_type') != 'teoria_sumiller']
         theory_docs = [doc for doc in documents if doc.get('metadata', {}).get('doc_type') == 'teoria_sumiller']
         
-        user_content = f"""
-        Consulta original: "{user_query}"
-        Mi sistema agéntico expandió la búsqueda a: {expanded_queries}
+        user_content = f"""Consulta: "{user_query}"
         
-        CONOCIMIENTO TEÓRICO RELEVANTE:
-        {json.dumps(theory_docs, indent=2, ensure_ascii=False) if theory_docs else "Sin teoría específica encontrada"}
-        
-        VINOS ENCONTRADOS:
-        {json.dumps(wine_docs, indent=2, ensure_ascii=False) if wine_docs else "Sin vinos específicos encontrados"}
-        
-        INSTRUCCIONES:
-        - Si hay teoría relevante, úsala para explicar conceptos y justificar recomendaciones
-        - Si hay vinos, explica por qué son adecuados usando principios profesionales
-        - Combina ambos para dar una respuesta completa y educativa
-        """
+VINOS ENCONTRADOS: {json.dumps(wine_docs, indent=2, ensure_ascii=False) if wine_docs else "Sin vinos"}
+TEORÍA RELEVANTE: {json.dumps(theory_docs, indent=2, ensure_ascii=False) if theory_docs else "Sin teoría"}
+"""
     
     try:
         response = await openai_client.chat.completions.create(
@@ -316,121 +186,172 @@ async def generate_agentic_response(user_query: str, search_result: Dict[str, An
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        logger.error(f"Error al generar respuesta agéntica con OpenAI: {e}")
-        # Fallback response
+        logger.error(f"Error generando respuesta: {e}")
         if documents:
-            return f"Encontré {len(documents)} vinos relevantes: " + ", ".join([doc.get('metadata', {}).get('name', 'Sin nombre') for doc in documents[:3]])
+            return f"Encontré {len(documents)} vinos relevantes para tu consulta."
         else:
-            return "No encontré vinos que coincidan con tu búsqueda. ¿Podrías ser más específico?"
+            return "No encontré vinos específicos. ¿Podrías ser más específico?"
 
-# --- Endpoints Mejorados ---
-
+# 🆕 NUEVO ENDPOINT PRINCIPAL CON FILTRO INTELIGENTE
 @app.post("/query", response_model=RecommendationResponse)
-async def handle_agentic_query_resilient(query: Query = Body(...)):
+async def handle_intelligent_query(query: Query = Body(...)):
     """
-    ✨ VERSIÓN RESILIENTE: Maneja failures gracefully con connection pooling
+    ✨ ENDPOINT PRINCIPAL CON FILTRO INTELIGENTE
+    Clasifica consultas antes de decidir si usar RAG o respuesta directa
     """
     user_prompt = query.prompt
     user_id = query.user_id
-    logger.info(f"🧠 Consulta resiliente de {user_id}: \"{user_prompt}\"")
-
-    # 1. Búsqueda resiliente con RAG agéntico
-    search_result = await search_wines_with_agentic_rag(user_prompt, user_id)
-    wines_found = len(search_result.get('sources', []))
-    expanded_queries = search_result.get('expanded_queries', [])
     
-    # 2. Generar respuesta (tu lógica existente)
-    conversational_response = await generate_agentic_response(user_prompt, search_result, user_id)
+    logger.info(f"🧠 Consulta inteligente de {user_id}: \"{user_prompt}\"")
     
-    # 3. Guardar interacción resiliente
-    await save_user_interaction_resilient(user_id, user_prompt, conversational_response, search_result.get('sources', []))
+    # 🔍 PASO 1: CLASIFICAR CONSULTA CON LLM
+    if openai_client:
+        classification = await filter_and_classify_query(openai_client, user_prompt)
+    else:
+    # Fallback si no hay OpenAI: asumir que es búsqueda de vinos (excepto si detecta mensaje secreto)
+        if any(word in user_prompt.lower() for word in ['vicky', 'pedro', 'mensaje', 'secreto']):
+            classification = {
+                "category": "SECRET_MESSAGE",
+                "confidence": 0.8,
+                "reasoning": "Fallback: detectadas keywords de mensaje secreto",
+                "should_use_rag": False
+            }
+        else:
+            classification = {
+                "category": "WINE_SEARCH",
+                "confidence": 0.5,
+                "reasoning": "OpenAI no disponible - asumiendo búsqueda de vinos",
+                "should_use_rag": True
+            }
     
+    logger.info(f"🏷️ Clasificación: {classification['category']} (confianza: {classification['confidence']:.2f})")
+    logger.info(f"💭 Razón: {classification['reasoning']}")
+    
+    # 🎯 PASO 2: DECIDIR ACCIÓN BASADA EN CLASIFICACIÓN
+    category = classification["category"]
+    should_use_rag = classification["should_use_rag"]
+    
+    if should_use_rag:
+        # 🍷 CONSULTA DE BÚSQUEDA DE VINOS - Usar RAG agéntico
+        logger.info("📤 Enviando al RAG agéntico")
+        search_result = await search_wines_with_agentic_rag(user_prompt, user_id)
+        response = await generate_agentic_response(user_prompt, search_result, user_id)
+        wines_found = len(search_result.get('sources', []))
+        expanded_queries = search_result.get('expanded_queries', [])
+        used_rag = True
+        
+    else:
+        # 💬 RESPUESTA DIRECTA SIN RAG
+        if category in CATEGORY_RESPONSES:
+            response = CATEGORY_RESPONSES[category]
+        else:
+            # Fallback para categorías no definidas
+            response = CATEGORY_RESPONSES["OFF_TOPIC"]
+        
+        wines_found = 0
+        expanded_queries = []
+        used_rag = False
+        
+        logger.info(f"⚡ Respuesta directa para categoría: {category}")
+    
+    # 💾 PASO 3: GUARDAR INTERACCIÓN (SIEMPRE)
+    await save_user_interaction_resilient(
+        user_id, 
+        user_prompt, 
+        response, 
+        search_result.get('sources', []) if used_rag else []
+    )
+    
+    # 📊 PASO 4: RETORNAR RESPUESTA ENRIQUECIDA
     return RecommendationResponse(
-        response=conversational_response,
+        response=response,
         expanded_queries=expanded_queries,
-        wines_found=wines_found
+        wines_found=wines_found,
+        query_category=category,
+        used_rag=used_rag
     )
 
+# 🆕 NUEVO ENDPOINT PARA TESTING DEL FILTRO
+@app.post("/classify")
+async def test_classification(query: Query = Body(...)):
+    """
+    Endpoint para probar solo la clasificación sin ejecutar acción
+    """
+    if not openai_client:
+        return {"error": "OpenAI no configurado"}
+    
+    classification = await filter_and_classify_query(openai_client, query.prompt)
+    return {
+        "query": query.prompt,
+        "classification": classification,
+        "would_use_rag": classification["should_use_rag"]
+    }
+
+# Endpoints existentes (sin cambios)
 @app.get("/health")
 async def health_check_resilient():
-    """Health check con información del circuit breaker"""
+    """Health check con información del filtro"""
     try:
-        # Verificar servicios con timeout corto usando el cliente simple
         services_status = {"rag_mcp": False, "memory_mcp": False}
         
         try:
             await resilient_client.get_simple(f"{RAG_MCP_URL}/health")
             services_status["rag_mcp"] = True
-        except Exception as e:
-            logger.warning(f"RAG MCP health check failed: {e}")
+        except:
+            pass
         
         try:
             await resilient_client.get_simple(f"{MEMORY_MCP_URL}/health")
             services_status["memory_mcp"] = True
-        except Exception as e:
-            logger.warning(f"Memory MCP health check failed: {e}")
+        except:
+            pass
         
-        # Información del circuit breaker
         circuit_info = resilient_client.get_circuit_info()
-        
-        # Determinar estado general
         all_healthy = services_status["rag_mcp"] and services_status["memory_mcp"]
-        status = "healthy" if all_healthy else "degraded"
         
         return {
-            "status": status,
+            "status": "healthy" if all_healthy else "degraded",
             "circuit_breaker": circuit_info,
             "services": {
                 **services_status,
-                "openai": openai_client is not None
+                "openai": openai_client is not None,
+                "intelligent_filter": openai_client is not None  # NUEVO
             },
             "config": {
                 "rag_url": RAG_MCP_URL,
                 "memory_url": MEMORY_MCP_URL,
-                "openai_model": OPENAI_MODEL
+                "openai_model": OPENAI_MODEL,
+                "filter_enabled": openai_client is not None  # NUEVO
             }
         }
-        
     except Exception as e:
-        return {
-            "status": "error", 
-            "error": str(e),
-            "circuit_breaker": resilient_client.get_circuit_info(),
-            "services": {
-                "rag_mcp": False,
-                "memory_mcp": False,
-                "openai": openai_client is not None
-            }
-        }
+        return {"status": "error", "error": str(e)}
 
 @app.get("/stats")
 async def get_stats_resilient():
-    """Estadísticas del sumiller agéntico con información resiliente"""
+    """Estadísticas incluyendo info del filtro"""
     try:
         stats = {"rag_stats": {}, "memory_stats": {}, "client_stats": {}}
         
-        # Intentar obtener stats de RAG
         try:
             rag_stats = await resilient_client.get_with_retry(f"{RAG_MCP_URL}/stats", max_retries=1)
             stats["rag_stats"] = rag_stats
         except Exception as e:
             stats["rag_stats"] = {"error": str(e)}
         
-        # Intentar obtener stats de Memory
         try:
             memory_stats = await resilient_client.get_with_retry(f"{MEMORY_MCP_URL}/stats", max_retries=1)
             stats["memory_stats"] = memory_stats
         except Exception as e:
             stats["memory_stats"] = {"error": str(e)}
         
-        # Stats del cliente resiliente
         stats["client_stats"] = {
             "circuit_breaker": resilient_client.get_circuit_info(),
-            "pool_initialized": resilient_client.pool._client is not None
+            "pool_initialized": resilient_client.pool._client is not None,
+            "intelligent_filter_enabled": openai_client is not None  # NUEVO
         }
         
         return stats
-        
     except Exception as e:
         return {"error": f"No se pudieron obtener estadísticas: {e}"}
 

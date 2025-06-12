@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copiar archivos de la aplicación
 COPY sumiller-bot/main.py .
 COPY sumiller-bot/http_client.py .
+COPY sumiller-bot/query_filter.py .
 
 # Copiar config.py desde la raíz del proyecto
 COPY config.py .

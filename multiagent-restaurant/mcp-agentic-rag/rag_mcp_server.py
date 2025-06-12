@@ -313,128 +313,509 @@ mcp_server = Server("agentic-rag-server")
 
 @mcp_server.list_tools()
 async def list_tools() -> List[types.Tool]:
-    """Listar herramientas disponibles"""
+    """Lista todas las herramientas disponibles"""
     return [
+        # === HERRAMIENTAS RAG BÁSICAS ===
         types.Tool(
-            name="search_knowledge",
-            description="Buscar información en la base de conocimiento usando RAG agéntico",
+            name="buscar_vinos",
+            description="Busca vinos en la base de datos usando búsqueda semántica avanzada",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "query": {
+                    "consulta": {
                         "type": "string",
-                        "description": "Consulta o pregunta a buscar"
+                        "description": "Consulta para buscar vinos (ej: 'vino tinto para asado')"
                     },
-                    "context": {
-                        "type": "object",
-                        "description": "Contexto adicional para la búsqueda"
-                    },
-                    "max_results": {
+                    "max_resultados": {
                         "type": "integer",
-                        "description": "Número máximo de resultados",
+                        "description": "Número máximo de vinos a devolver (1-20)",
+                        "minimum": 1,
+                        "maximum": 20,
                         "default": 5
                     }
                 },
-                "required": ["query"]
+                "required": ["consulta"]
             }
         ),
         types.Tool(
-            name="add_document",
-            description="Agregar un nuevo documento a la base de conocimiento",
+            name="agregar_documento",
+            description="Agrega un nuevo documento (vino, teoría, etc.) a la base de conocimientos",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "content": {
+                    "contenido": {
                         "type": "string",
-                        "description": "Contenido del documento"
+                        "description": "Contenido del documento a agregar"
                     },
-                    "metadata": {
+                    "metadatos": {
                         "type": "object",
-                        "description": "Metadatos del documento"
+                        "description": "Metadatos del documento (tipo, fuente, etc.)",
+                        "default": {}
                     },
-                    "doc_id": {
+                    "id_documento": {
                         "type": "string",
-                        "description": "ID opcional del documento"
+                        "description": "ID único para el documento (opcional)"
                     }
                 },
-                "required": ["content"]
+                "required": ["contenido"]
+            }
+        ),
+        
+        # === HERRAMIENTAS DE MARIDAJE ===
+        types.Tool(
+            name="sugerir_maridaje",
+            description="Sugiere vinos ideales para maridar con platos específicos",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "plato": {
+                        "type": "string",
+                        "description": "Descripción del plato o tipo de comida (ej: 'paella', 'asado', 'pescado al horno')"
+                    },
+                    "ocasion": {
+                        "type": "string",
+                        "description": "Tipo de ocasión (casual, formal, romántica, celebración)",
+                        "enum": ["casual", "formal", "romantica", "celebracion", "familiar", "negocios"],
+                        "default": "casual"
+                    },
+                    "presupuesto_max": {
+                        "type": "number",
+                        "description": "Presupuesto máximo en euros (opcional)"
+                    }
+                },
+                "required": ["plato"]
             }
         ),
         types.Tool(
-            name="get_collection_stats",
-            description="Obtener estadísticas de la colección de documentos",
+            name="crear_menu_maridaje",
+            description="Crea un menú completo con maridajes de vinos para cada plato",
             inputSchema={
                 "type": "object",
-                "properties": {},
-                "required": []
+                "properties": {
+                    "platos": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Lista de platos para el menú (mínimo 2, máximo 6)"
+                    },
+                    "estilo_evento": {
+                        "type": "string",
+                        "description": "Estilo del evento",
+                        "enum": ["elegante", "casual", "rustico", "moderno", "tradicional"],
+                        "default": "casual"
+                    },
+                    "num_comensales": {
+                        "type": "integer",
+                        "description": "Número de comensales",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "default": 4
+                    }
+                },
+                "required": ["platos"]
+            }
+        ),
+        
+        # === HERRAMIENTAS DE ANÁLISIS DE VINOS ===
+        types.Tool(
+            name="analizar_vino",
+            description="Proporciona análisis detallado de las características de un vino específico",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "nombre_vino": {
+                        "type": "string",
+                        "description": "Nombre exacto del vino a analizar"
+                    },
+                    "aspectos": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": ["aromas", "sabores", "estructura", "maridajes", "temperatura", "decantacion", "guarda"]
+                        },
+                        "description": "Aspectos específicos a analizar",
+                        "default": ["aromas", "sabores", "maridajes"]
+                    }
+                },
+                "required": ["nombre_vino"]
+            }
+        ),
+        types.Tool(
+            name="comparar_vinos",
+            description="Compara las características entre dos o más vinos",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "vinos": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Lista de nombres de vinos a comparar (2-4 vinos)",
+                        "minItems": 2,
+                        "maxItems": 4
+                    },
+                    "criterios": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": ["precio", "calidad", "region", "tipo", "añada", "maridajes", "puntuacion"]
+                        },
+                        "description": "Criterios de comparación",
+                        "default": ["precio", "calidad", "puntuacion"]
+                    }
+                },
+                "required": ["vinos"]
+            }
+        ),
+        
+        # === HERRAMIENTAS DE RECOMENDACIÓN ===
+        types.Tool(
+            name="recomendar_por_presupuesto",
+            description="Recomienda vinos dentro de un rango de presupuesto específico",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "presupuesto_min": {
+                        "type": "number",
+                        "description": "Presupuesto mínimo en euros",
+                        "minimum": 0
+                    },
+                    "presupuesto_max": {
+                        "type": "number",
+                        "description": "Presupuesto máximo en euros"
+                    },
+                    "tipo_vino": {
+                        "type": "string",
+                        "description": "Tipo de vino preferido",
+                        "enum": ["tinto", "blanco", "rosado", "espumoso", "cualquiera"],
+                        "default": "cualquiera"
+                    },
+                    "num_recomendaciones": {
+                        "type": "integer",
+                        "description": "Número de recomendaciones",
+                        "minimum": 1,
+                        "maximum": 10,
+                        "default": 3
+                    }
+                },
+                "required": ["presupuesto_max"]
+            }
+        ),
+        types.Tool(
+            name="recomendar_por_region",
+            description="Recomienda vinos de una región vitivinícola específica",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "region": {
+                        "type": "string",
+                        "description": "Región vitivinícola (ej: 'Rioja', 'Ribera del Duero', 'Rías Baixas')"
+                    },
+                    "estilo": {
+                        "type": "string",
+                        "description": "Estilo de vino buscado",
+                        "enum": ["joven", "crianza", "reserva", "gran_reserva", "cualquiera"],
+                        "default": "cualquiera"
+                    },
+                    "max_resultados": {
+                        "type": "integer",
+                        "description": "Máximo número de recomendaciones",
+                        "minimum": 1,
+                        "maximum": 15,
+                        "default": 5
+                    }
+                },
+                "required": ["region"]
+            }
+        ),
+        
+        # === HERRAMIENTAS DE EDUCACIÓN VINÍCOLA ===
+        types.Tool(
+            name="explicar_concepto",
+            description="Explica conceptos técnicos de sumillería y viticultura en español",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "concepto": {
+                        "type": "string",
+                        "description": "Concepto a explicar (ej: 'taninos', 'maloláctico', 'terroir', 'decantación')"
+                    },
+                    "nivel_detalle": {
+                        "type": "string",
+                        "description": "Nivel de explicación",
+                        "enum": ["basico", "intermedio", "avanzado"],
+                        "default": "intermedio"
+                    }
+                },
+                "required": ["concepto"]
+            }
+        ),
+        types.Tool(
+            name="guia_cata",
+            description="Proporciona guía paso a paso para catar vinos profesionalmente",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tipo_vino": {
+                        "type": "string",
+                        "description": "Tipo de vino a catar",
+                        "enum": ["tinto", "blanco", "rosado", "espumoso"],
+                        "default": "tinto"
+                    },
+                    "experiencia": {
+                        "type": "string",
+                        "description": "Nivel de experiencia del catador",
+                        "enum": ["principiante", "intermedio", "avanzado"],
+                        "default": "principiante"
+                    }
+                },
+                "required": ["tipo_vino"]
+            }
+        ),
+        
+        # === HERRAMIENTAS DE GESTIÓN DE BODEGA ===
+        types.Tool(
+            name="calcular_inventario",
+            description="Calcula estadísticas del inventario de vinos disponible",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "filtros": {
+                        "type": "object",
+                        "properties": {
+                            "tipo": {"type": "string"},
+                            "region": {"type": "string"},
+                            "precio_min": {"type": "number"},
+                            "precio_max": {"type": "number"}
+                        },
+                        "description": "Filtros opcionales para el cálculo"
+                    },
+                    "incluir_estadisticas": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": ["stock_total", "valor_total", "precio_promedio", "por_region", "por_tipo", "por_añada"]
+                        },
+                        "description": "Estadísticas a incluir",
+                        "default": ["stock_total", "valor_total", "precio_promedio"]
+                    }
+                }
+            }
+        ),
+        types.Tool(
+            name="temperaturas_servicio",
+            description="Proporciona temperaturas óptimas de servicio para diferentes tipos de vino",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tipo_vino": {
+                        "type": "string",
+                        "description": "Tipo de vino o nombre específico",
+                        "enum": ["tinto_joven", "tinto_crianza", "tinto_reserva", "blanco_joven", "blanco_crianza", "rosado", "espumoso", "dulce", "fortificado"]
+                    },
+                    "contexto": {
+                        "type": "string",
+                        "description": "Contexto de consumo",
+                        "enum": ["aperitivo", "comida", "postre", "degustacion"],
+                        "default": "comida"
+                    }
+                },
+                "required": ["tipo_vino"]
             }
         )
     ]
 
 @mcp_server.call_tool()
 async def call_tool(name: str, arguments: dict) -> List[types.TextContent]:
-    """Ejecutar herramienta solicitada"""
+    """Ejecutar herramientas"""
     try:
-        if name == "search_knowledge":
-            query = arguments.get("query", "")
-            context = arguments.get("context", {})
-            max_results = arguments.get("max_results", 5)
+        # === HERRAMIENTAS RAG BÁSICAS ===
+        if name == "buscar_vinos":
+            consulta = arguments.get("consulta", "")
+            max_resultados = arguments.get("max_resultados", 5)
             
-            result = await rag_engine.agentic_rag_query(query, context, max_results)
+            response = await rag_engine.agentic_rag_query(consulta, max_results=max_resultados)
             
-            response = {
-                "answer": result.answer,
-                "sources": result.sources,
-                "context_used": result.context_used,
-                "num_sources": len(result.sources)
+            # Filtrar solo vinos
+            vinos = [source for source in response.sources if source.get('metadata', {}).get('type') == 'vino']
+            
+            result = f"🍷 **Búsqueda de vinos**: '{consulta}'\n\n"
+            result += f"**Encontrados**: {len(vinos)} vinos\n\n"
+            
+            for i, vino in enumerate(vinos[:max_resultados], 1):
+                metadata = vino.get('metadata', {})
+                result += f"**{i}. {metadata.get('name', 'Sin nombre')}**\n"
+                result += f"   • Tipo: {metadata.get('wine_type', 'N/A')}\n"
+                result += f"   • Región: {metadata.get('region', 'N/A')}\n"
+                result += f"   • Precio: {metadata.get('price', 'N/A')}€\n"
+                result += f"   • Puntuación: {metadata.get('rating', 'N/A')}/100\n"
+                result += f"   • Maridaje: {metadata.get('pairing', 'N/A')}\n\n"
+            
+            return [types.TextContent(type="text", text=result)]
+            
+        elif name == "agregar_documento":
+            contenido = arguments.get("contenido", "")
+            metadatos = arguments.get("metadatos", {})
+            id_documento = arguments.get("id_documento")
+            
+            doc_id = await rag_engine.add_document(contenido, metadatos, id_documento)
+            
+            result = f"✅ **Documento agregado exitosamente**\n\n"
+            result += f"**ID del documento**: {doc_id}\n"
+            result += f"**Contenido**: {contenido[:100]}{'...' if len(contenido) > 100 else ''}\n"
+            result += f"**Metadatos**: {metadatos}\n"
+            
+            return [types.TextContent(type="text", text=result)]
+        
+        # === HERRAMIENTAS DE MARIDAJE ===
+        elif name == "sugerir_maridaje":
+            plato = arguments.get("plato", "")
+            ocasion = arguments.get("ocasion", "casual")
+            presupuesto_max = arguments.get("presupuesto_max")
+            
+            # Expandir la consulta para maridaje
+            consulta_maridaje = f"vino maridaje {plato} {ocasion}"
+            response = await rag_engine.agentic_rag_query(consulta_maridaje, max_results=5)
+            
+            # Filtrar vinos y aplicar filtro de presupuesto si existe
+            vinos_sugeridos = []
+            for source in response.sources:
+                if source.get('metadata', {}).get('type') == 'vino':
+                    precio = source.get('metadata', {}).get('price', 0)
+                    if presupuesto_max is None or (precio and precio <= presupuesto_max):
+                        vinos_sugeridos.append(source)
+            
+            result = f"🍽️ **Sugerencias de maridaje para**: {plato}\n"
+            result += f"**Ocasión**: {ocasion.title()}\n"
+            if presupuesto_max:
+                result += f"**Presupuesto máximo**: {presupuesto_max}€\n"
+            result += f"\n**Vinos recomendados** ({len(vinos_sugeridos)} encontrados):\n\n"
+            
+            for i, vino in enumerate(vinos_sugeridos[:3], 1):
+                metadata = vino.get('metadata', {})
+                result += f"**{i}. {metadata.get('name', 'Sin nombre')}**\n"
+                result += f"   • Tipo: {metadata.get('wine_type', 'N/A')}\n"
+                result += f"   • Región: {metadata.get('region', 'N/A')}\n"
+                result += f"   • Precio: {metadata.get('price', 'N/A')}€\n"
+                result += f"   • ¿Por qué funciona?: {metadata.get('pairing', 'Maridaje versátil')}\n\n"
+            
+            if not vinos_sugeridos:
+                result += "No se encontraron vinos específicos, pero puedes buscar vinos de estas características:\n"
+                result += "• Para carnes: vinos tintos con cuerpo\n"
+                result += "• Para pescados: vinos blancos frescos\n"
+                result += "• Para postres: vinos dulces o espumosos\n"
+            
+            return [types.TextContent(type="text", text=result)]
+
+        elif name == "explicar_concepto":
+            concepto = arguments.get("concepto", "")
+            nivel_detalle = arguments.get("nivel_detalle", "intermedio")
+            
+            # Buscar información del concepto en la base de conocimientos
+            response = await rag_engine.agentic_rag_query(f"concepto {concepto} sumilleria viticultura", max_results=3)
+            
+            result = f"📚 **Concepto**: {concepto.title()}\n"
+            result += f"**Nivel**: {nivel_detalle.title()}\n\n"
+            
+            # Si hay información en la base de conocimientos
+            if response.sources and any('teoria' in s.get('metadata', {}).get('source', '') for s in response.sources):
+                teoria_source = next((s for s in response.sources if 'teoria' in s.get('metadata', {}).get('source', '')), None)
+                if teoria_source:
+                    result += f"**Explicación desde la base de conocimientos:**\n"
+                    result += f"{teoria_source.get('content', '')[:500]}...\n\n"
+            
+            # Explicaciones básicas predefinidas
+            explicaciones = {
+                "taninos": {
+                    "basico": "Compuestos que dan sensación de sequedad y astringencia en boca. Vienen de las pieles de la uva.",
+                    "intermedio": "Polifenoles que aportan estructura, color y capacidad de guarda a los vinos tintos. Se extraen de pieles, pepitas y madera.",
+                    "avanzado": "Compuestos fenólicos que incluyen taninos condensados (proantocianidinas) y taninos hidrolizables, fundamentales en la estructura tánica y evolución organoléptica del vino."
+                },
+                "terroir": {
+                    "basico": "El conjunto de factores ambientales que influyen en el carácter del vino: suelo, clima y tradición.",
+                    "intermedio": "Concepto francés que engloba suelo, microclima, topografía y factor humano, creando la personalidad única de cada viñedo.",
+                    "avanzado": "Sistema complejo de interacciones entre geología, pedología, climatología, hidrología y prácticas vitivinícolas que confieren tipicidad."
+                },
+                "decantacion": {
+                    "basico": "Separar el vino de los sedimentos y oxigenarlo antes de servir.",
+                    "intermedio": "Proceso de trasiego que permite separar sedimentos y favorecer la oxigenación para desarrollar aromas y suavizar taninos.",
+                    "avanzado": "Técnica de oxigenación controlada que acelera procesos evolutivos, permitiendo la volatilización de compuestos reductivos y la polimerización tánica."
+                }
             }
             
-            return [types.TextContent(
-                type="text",
-                text=json.dumps(response, indent=2, ensure_ascii=False)
-            )]
+            if concepto.lower() in explicaciones:
+                result += f"**Explicación ({nivel_detalle}):**\n"
+                result += f"{explicaciones[concepto.lower()][nivel_detalle]}\n\n"
             
-        elif name == "add_document":
-            content = arguments.get("content", "")
-            metadata = arguments.get("metadata", {})
-            doc_id = arguments.get("doc_id")
-            
-            result_id = await rag_engine.add_document(content, metadata, doc_id)
-            
-            return [types.TextContent(
-                type="text",
-                text=f"Documento agregado exitosamente con ID: {result_id}"
-            )]
-            
-        elif name == "get_collection_stats":
-            if rag_engine.collection:
-                stats = rag_engine.collection.get()
-                num_docs = len(stats['ids'])
-                
-                response = {
-                    "total_documents": num_docs,
-                    "collection_name": "rag_documents",
-                    "vector_db_type": VECTOR_DB_TYPE
-                }
-                
-                return [types.TextContent(
-                    type="text",
-                    text=json.dumps(response, indent=2)
-                )]
+            result += f"**💡 Consejo práctico:**\n"
+            if concepto.lower() == "taninos":
+                result += "Para apreciar los taninos, prueba vinos jóvenes vs. vinos con crianza del mismo viñedo.\n"
+            elif concepto.lower() == "terroir":
+                result += "Compara vinos de la misma varietal de diferentes regiones para entender el terroir.\n"
+            elif concepto.lower() == "decantacion":
+                result += "Decanta vinos tintos jóvenes 30-60 min antes, vinos maduros solo para separar sedimentos.\n"
             else:
-                return [types.TextContent(
-                    type="text",
-                    text="Colección no inicializada"
-                )]
+                result += "Profundiza practicando cata y consultando literatura especializada.\n"
+            
+            return [types.TextContent(type="text", text=result)]
+
+        elif name == "temperaturas_servicio":
+            tipo_vino = arguments.get("tipo_vino", "")
+            contexto = arguments.get("contexto", "comida")
+            
+            temperaturas = {
+                "tinto_joven": "14-16°C",
+                "tinto_crianza": "16-18°C", 
+                "tinto_reserva": "17-19°C",
+                "blanco_joven": "8-10°C",
+                "blanco_crianza": "10-12°C",
+                "rosado": "8-10°C",
+                "espumoso": "6-8°C",
+                "dulce": "6-8°C",
+                "fortificado": "12-16°C"
+            }
+            
+            result = f"🌡️ **Temperaturas de Servicio**\n\n"
+            
+            if tipo_vino in temperaturas:
+                result += f"**Vino**: {tipo_vino.replace('_', ' ').title()}\n"
+                result += f"**Temperatura óptima**: {temperaturas[tipo_vino]}\n"
+                result += f"**Contexto**: {contexto.title()}\n\n"
+                
+                # Consejos específicos
+                result += f"**💡 Consejos prácticos:**\n"
+                
+                if "tinto" in tipo_vino:
+                    result += "• Sacar de la bodega 1-2 horas antes\n"
+                    result += "• En verano, puede necesitar refrigeración ligera\n"
+                    result += "• Evitar calentamiento excesivo en la mano\n"
+                elif "blanco" in tipo_vino or tipo_vino in ["rosado", "espumoso"]:
+                    result += "• Refrigerar 2-3 horas antes del servicio\n"
+                    result += "• Usar cubitera con agua y hielo durante la comida\n"
+                    result += "• No sobre-enfriar (pierde aromas)\n"
+                
+                result += f"\n**⚠️ Importante:**\n"
+                result += "• Termómetro de vino para precisión\n"
+                result += "• La temperatura afecta percepción de aromas y sabores\n"
+                result += "• Ajustar según estación del año\n"
+                
+            else:
+                result += f"**Todas las temperaturas de servicio:**\n\n"
+                for tipo, temp in temperaturas.items():
+                    result += f"• **{tipo.replace('_', ' ').title()}**: {temp}\n"
+                
+                result += f"\n**Regla general:**\n"
+                result += "• Más ligero el vino → más frío\n"
+                result += "• Más estructura/crianza → más cálido\n"
+                result += "• Espumosos siempre muy fríos\n"
+            
+            return [types.TextContent(type="text", text=result)]
+        
+        # Herramienta no encontrada
         else:
-            raise ValueError(f"Herramienta desconocida: {name}")
+            return [types.TextContent(type="text", text=f"❌ Herramienta '{name}' no implementada")]
             
     except Exception as e:
         logger.error(f"Error ejecutando herramienta {name}: {e}")
-        return [types.TextContent(
-            type="text",
-            text=f"Error: {str(e)}"
-        )]
+        return [types.TextContent(type="text", text=f"❌ Error: {str(e)}")]
 
 @mcp_server.list_resources()
 async def list_resources() -> List[types.Resource]:
@@ -666,3 +1047,32 @@ async def add_document_endpoint(request: DocumentRequest):
         request.doc_id
     )
     return {"doc_id": doc_id, "status": "added"}
+
+async def main():
+    """Función principal para ejecutar como servidor MCP"""
+    import sys
+    from mcp.server.stdio import stdio_server
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "http":
+        # Modo HTTP con FastAPI
+        import uvicorn
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+    else:
+        # Modo MCP stdio por defecto
+        await rag_engine.initialize()
+        
+        # Cargar documentos desde directorio local si existe
+        knowledge_dir = Path("knowledge_base")
+        if knowledge_dir.exists():
+            await startup_event()
+        
+        async with stdio_server() as (read_stream, write_stream):
+            await mcp_server.run(
+                read_stream,
+                write_stream,
+                mcp_server.create_initialization_options()
+            )
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())

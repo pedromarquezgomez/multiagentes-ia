@@ -1,21 +1,21 @@
 # sumiller-bot/main.py
 """
-Sumiller Bot - Agente de Razonamiento y Conversación con MCP Agentic RAG
-Utiliza el nuevo sistema MCP Agentic RAG para búsqueda semántica avanzada y generación contextual.
-1. Conecta con el RAG MCP Server para expansión agéntica de consultas.
-2. Utiliza memoria conversacional para personalización.
-3. Genera respuestas conversacionales mejoradas.
+Sumiller Bot - Versión Mejorada con HTTP Connection Pooling y Resilient Client
+Código completo actualizado sin errores
 """
 import os
 import sys
 import logging
-import httpx
 import json
 from openai import AsyncOpenAI
 from typing import List, Dict, Any
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
+
+# Importar el nuevo cliente resiliente
+from http_client import resilient_client, close_http_pool
 
 # Importar configuración multi-entorno
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -32,26 +32,62 @@ PORT = int(os.getenv("PORT", str(config.sumiller_port if config.is_local() else 
 RAG_MCP_URL = os.getenv('RAG_MCP_URL', "http://localhost:8000")
 MEMORY_MCP_URL = os.getenv('MEMORY_MCP_URL', "http://localhost:8002")
 
-# Configuración DeepSeek
-DEEPSEEK_API_KEY = config.get_deepseek_key()
-DEEPSEEK_BASE_URL = config.get_deepseek_base_url()
-DEEPSEEK_MODEL = config.get_deepseek_model()
+# Configuración OpenAI
+OPENAI_API_KEY = config.get_openai_key()
+OPENAI_BASE_URL = config.get_openai_base_url()
+OPENAI_MODEL = config.get_openai_model()
 
-if not DEEPSEEK_API_KEY:
-    logger.warning("No se pudo obtener la DeepSeek API Key. Las llamadas a DeepSeek no funcionarán.")
-    deepseek_client = None
+if not OPENAI_API_KEY:
+    logger.warning("No se pudo obtener la OpenAI API Key. Las llamadas a OpenAI no funcionarán.")
+    openai_client = None
 else:
-    # Usar el cliente OpenAI pero con la configuración de DeepSeek
-    deepseek_client = AsyncOpenAI(
-        api_key=DEEPSEEK_API_KEY,
-        base_url=DEEPSEEK_BASE_URL
+    # Usar el cliente OpenAI con la configuración de OpenAI
+    openai_client = AsyncOpenAI(
+        api_key=OPENAI_API_KEY,
+        base_url=OPENAI_BASE_URL
     )
-    logger.info(f"✅ Cliente DeepSeek configurado: {DEEPSEEK_BASE_URL} - Modelo: {DEEPSEEK_MODEL}")
+    logger.info(f"✅ Cliente OpenAI configurado: {OPENAI_BASE_URL} - Modelo: {OPENAI_MODEL}")
 
+# 🔄 LIFECYCLE MANAGEMENT MEJORADO
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Gestión del ciclo de vida de la aplicación"""
+    # Startup
+    logger.info("🚀 Iniciando Sumiller Bot con HTTP pooling...")
+    
+    # Verificar conectividad inicial y pre-warm connections
+    try:
+        client = await resilient_client.pool.get_client()
+        # Pre-warm connections con health checks
+        try:
+            await client.get(f"{RAG_MCP_URL}/health", timeout=5.0)
+            logger.info("✅ RAG MCP Server conectado")
+        except Exception as e:
+            logger.warning(f"⚠️ RAG MCP Server no disponible: {e}")
+        
+        try:
+            await client.get(f"{MEMORY_MCP_URL}/health", timeout=5.0)
+            logger.info("✅ Memory MCP Server conectado")
+        except Exception as e:
+            logger.warning(f"⚠️ Memory MCP Server no disponible: {e}")
+            
+        logger.info("✅ HTTP pool inicializado y conexiones pre-calentadas")
+    except Exception as e:
+        logger.warning(f"⚠️ Error durante inicialización: {e}")
+    
+    yield
+    
+    # Shutdown
+    logger.info("🔒 Cerrando Sumiller Bot...")
+    await close_http_pool()
+    logger.info("✅ Recursos liberados correctamente")
+
+# Crear app con lifecycle management
 app = FastAPI(
-    title="Sumiller Bot API - Agentic RAG",
-    description="Un agente inteligente con RAG agéntico que recomienda vinos personalizados.",
-    version="3.0.0"
+    title="Sumiller Bot API - Resilient",
+    description="Sumiller con connection pooling, circuit breakers y retry logic",
+    version="3.1.0",
+    lifespan=lifespan
 )
 
 # Configuración de CORS para permitir conexiones desde la UI
@@ -63,7 +99,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Modelos de Datos ---
+# --- Modelos de Datos (sin cambios) ---
 class Query(BaseModel):
     prompt: str
     user_id: str = "default_user"  # Para memoria conversacional
@@ -73,133 +109,106 @@ class RecommendationResponse(BaseModel):
     expanded_queries: List[str] = []
     wines_found: int = 0
 
-# --- Integración con MCP Agentic RAG ---
+# --- Funciones Mejoradas con Cliente Resiliente ---
 
 async def search_wines_with_agentic_rag(user_query: str, user_id: str = "default_user") -> Dict[str, Any]:
-    """Utiliza el nuevo sistema MCP Agentic RAG para búsqueda semántica avanzada."""
-    logger.info(f"🔍 Iniciando búsqueda RAG para: '{user_query}'")
-    logger.info(f"🔗 URL del RAG MCP: {RAG_MCP_URL}")
+    """
+    ✨ VERSIÓN MEJORADA: Utiliza connection pooling y retry logic
+    """
+    logger.info(f"🔍 Búsqueda RAG resiliente para: '{user_query}'")
     
-    async with httpx.AsyncClient() as client:
-        try:
-            # 1. Primero, obtener contexto de memoria si existe
-            logger.info("💾 Obteniendo contexto de memoria...")
-            memory_context = await get_user_memory(user_id, client)
-            logger.info(f"💾 Contexto de memoria obtenido: {bool(memory_context)}")
-            
-            # 2. Realizar búsqueda con RAG agéntico
-            rag_payload = {
-                "query": user_query,
-                "max_results": 3  # Reducido para menor latencia
-            }
-            
-            # Solo agregar contexto si existe para reducir payload
-            if memory_context:
-                rag_payload["context"] = memory_context
-            
-            logger.info(f"📤 Enviando payload a {RAG_MCP_URL}/query")
-            logger.info(f"📦 Payload: {rag_payload}")
-            
-            response = await client.post(
-                f"{RAG_MCP_URL}/query",
-                json=rag_payload,
-                timeout=30.0  # Aumentado para búsquedas complejas
-            )
-            
-            logger.info(f"📡 Respuesta recibida: status={response.status_code}")
-            response.raise_for_status()
-            search_result = response.json()
-            
-            logger.info(f"✅ RAG Agéntico encontró {len(search_result.get('sources', []))} vinos relevantes")
-            logger.info(f"📝 Consultas expandidas: {search_result.get('expanded_queries', [])}")
-            
-            return search_result
-            
-        except httpx.RequestError as e:
-            logger.error(f"Error al conectar con RAG MCP Server: {e}")
-            logger.error(f"URL intentada: {RAG_MCP_URL}/query")
-            # Fallback: búsqueda simple si RAG falla
-            return await simple_search_fallback(user_query, client)
-        except httpx.HTTPStatusError as e:
-            logger.error(f"RAG MCP Server devolvió un error: {e.response.status_code}")
-            logger.error(f"Respuesta del servidor: {e.response.text}")
-            return await simple_search_fallback(user_query, client)
-        except Exception as e:
-            logger.error(f"Error inesperado en RAG MCP: {e}")
-            logger.error(f"Tipo de error: {type(e)}")
-            return await simple_search_fallback(user_query, client)
-
-async def get_user_memory(user_id: str, client: httpx.AsyncClient) -> Dict[str, Any]:
-    """Obtiene el contexto de memoria del usuario."""
     try:
-        response = await client.get(
-            f"{MEMORY_MCP_URL}/memory/{user_id}",
-            timeout=5.0
+        # 1. Obtener contexto de memoria (con retry automático)
+        logger.info("💾 Obteniendo contexto de memoria...")
+        memory_context = await get_user_memory_resilient(user_id)
+        
+        # 2. Preparar payload para RAG
+        rag_payload = {
+            "query": user_query,
+            "max_results": 3
+        }
+        
+        if memory_context:
+            rag_payload["context"] = memory_context
+        
+        # 3. 🚀 LLAMADA RESILIENTE CON POOLING
+        logger.info(f"📤 Llamada resiliente a {RAG_MCP_URL}/query")
+        search_result = await resilient_client.post_with_retry(
+            url=f"{RAG_MCP_URL}/query",
+            json_data=rag_payload,
+            max_retries=3  # Retry automático con backoff
         )
-        if response.status_code == 200:
-            memory_data = response.json()
-            logger.info(f"💾 Memoria recuperada para usuario {user_id}: {len(memory_data.get('preferences', {}))} preferencias")
-            return memory_data
-        else:
-            return {}
+        
+        wines_found = len(search_result.get('sources', []))
+        logger.info(f"✅ RAG resiliente encontró {wines_found} vinos")
+        
+        return search_result
+        
     except Exception as e:
-        logger.warning(f"No se pudo recuperar memoria para {user_id}: {e}")
+        logger.error(f"❌ Error en búsqueda resiliente: {e}")
+        # Fallback graceful
+        return await fallback_search_resilient(user_query)
+
+async def get_user_memory_resilient(user_id: str) -> Dict[str, Any]:
+    """Obtener memoria con cliente resiliente"""
+    try:
+        memory_data = await resilient_client.get_with_retry(
+            url=f"{MEMORY_MCP_URL}/memory/{user_id}",
+            max_retries=2  # Menos retries para memoria (no crítico)
+        )
+        logger.info(f"💾 Memoria recuperada resiliente para {user_id}")
+        return memory_data
+    except Exception as e:
+        logger.warning(f"⚠️ No se pudo recuperar memoria (no crítico): {e}")
         return {}
 
-async def save_user_interaction(user_id: str, query: str, response: str, wines: List[Dict]) -> None:
-    """Guarda la interacción en memoria para futuras personalizaciones."""
-    async with httpx.AsyncClient() as client:
-        try:
-            memory_payload = {
-                "user_id": user_id,
-                "interaction": {
-                    "query": query,
-                    "response": response,
-                    "wines_recommended": [wine.get('metadata', {}).get('name', '') for wine in wines[:3]],
-                    "timestamp": "auto"
-                }
-            }
-            
-            await client.post(
-                f"{MEMORY_MCP_URL}/memory/save",
-                json=memory_payload,
-                timeout=5.0
-            )
-            logger.info(f"💾 Interacción guardada en memoria para usuario {user_id}")
-        except Exception as e:
-            logger.warning(f"No se pudo guardar en memoria: {e}")
-
-async def simple_search_fallback(user_query: str, client: httpx.AsyncClient) -> Dict[str, Any]:
-    """Búsqueda simple de fallback si RAG agéntico no está disponible."""
+async def fallback_search_resilient(user_query: str) -> Dict[str, Any]:
+    """Fallback con cliente resiliente"""
     try:
-        # Intentar búsqueda básica en el servicio RAG
-        logger.info(f"🔄 Intentando fallback con URL: {RAG_MCP_URL}/query")
-        response = await client.post(
-            f"{RAG_MCP_URL}/query",
-            json={"query": user_query, "max_results": 3},
-            timeout=20.0  # Timeout más generoso para fallback
+        # Intento más simple con menos parámetros
+        result = await resilient_client.post_with_retry(
+            url=f"{RAG_MCP_URL}/query",
+            json_data={"query": user_query, "max_results": 1},
+            max_retries=1
         )
-        logger.info(f"📡 Respuesta fallback status: {response.status_code}")
-        if response.status_code == 200:
-            result = response.json()
-            logger.info(f"✅ Fallback exitoso: {len(result.get('sources', []))} fuentes encontradas")
-            return result
+        logger.info("✅ Fallback resiliente exitoso")
+        return result
     except Exception as e:
-        logger.error(f"❌ Error en fallback: {e}")
-        logger.error(f"🔍 Tipo de error en fallback: {type(e)}")
-    
-    # Si todo falla, respuesta vacía
-    logger.warning("Fallback: No hay servicios de búsqueda disponibles")
-    return {"sources": [], "expanded_queries": [], "error": "Servicios no disponibles"}
+        logger.error(f"❌ Fallback resiliente también falló: {e}")
+        return {
+            "sources": [], 
+            "expanded_queries": [], 
+            "error": "Todos los servicios no disponibles"
+        }
 
-# --- Lógica del Agente Inteligente Mejorada ---
+async def save_user_interaction_resilient(user_id: str, query: str, response: str, wines: List[Dict]) -> None:
+    """Guardar interacción con cliente resiliente"""
+    try:
+        memory_payload = {
+            "user_id": user_id,
+            "interaction": {
+                "query": query,
+                "response": response,
+                "wines_recommended": [wine.get('metadata', {}).get('name', '') for wine in wines[:3]],
+                "timestamp": "auto"
+            }
+        }
+        
+        await resilient_client.post_with_retry(
+            url=f"{MEMORY_MCP_URL}/memory/save",
+            json_data=memory_payload,
+            max_retries=2
+        )
+        logger.info(f"💾 Interacción guardada resiliente para {user_id}")
+    except Exception as e:
+        logger.warning(f"⚠️ No se pudo guardar en memoria (no crítico): {e}")
 
 async def generate_agentic_response(user_query: str, search_result: Dict[str, Any], user_id: str) -> str:
     """
     Genera una respuesta conversacional usando el contexto completo del RAG agéntico.
     """
-    if not deepseek_client:
-        return f"La API de DeepSeek no está configurada. Resultados: {json.dumps(search_result.get('sources', []))}"
+    if not openai_client:
+        return f"La API de OpenAI no está configurada. Resultados: {json.dumps(search_result.get('sources', []))}"
 
     documents = search_result.get('sources', [])  # RAG MCP devuelve 'sources' no 'documents'
     expanded_queries = search_result.get('expanded_queries', [])
@@ -296,8 +305,8 @@ async def generate_agentic_response(user_query: str, search_result: Dict[str, An
         """
     
     try:
-        response = await deepseek_client.chat.completions.create(
-            model=DEEPSEEK_MODEL,
+        response = await openai_client.chat.completions.create(
+            model=OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content}
@@ -307,43 +316,34 @@ async def generate_agentic_response(user_query: str, search_result: Dict[str, An
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        logger.error(f"Error al generar respuesta agéntica con DeepSeek: {e}")
+        logger.error(f"Error al generar respuesta agéntica con OpenAI: {e}")
         # Fallback response
         if documents:
             return f"Encontré {len(documents)} vinos relevantes: " + ", ".join([doc.get('metadata', {}).get('name', 'Sin nombre') for doc in documents[:3]])
         else:
             return "No encontré vinos que coincidan con tu búsqueda. ¿Podrías ser más específico?"
 
-# --- Endpoint Principal Actualizado ---
+# --- Endpoints Mejorados ---
+
 @app.post("/query", response_model=RecommendationResponse)
-async def handle_agentic_query(query: Query = Body(...)):
+async def handle_agentic_query_resilient(query: Query = Body(...)):
     """
-    Orquesta el flujo de recomendación usando RAG agéntico avanzado.
+    ✨ VERSIÓN RESILIENTE: Maneja failures gracefully con connection pooling
     """
     user_prompt = query.prompt
     user_id = query.user_id
-    logger.info(f"🧠 Nueva consulta agéntica de {user_id}: \"{user_prompt}\"")
+    logger.info(f"🧠 Consulta resiliente de {user_id}: \"{user_prompt}\"")
 
-    # 1. Búsqueda con RAG agéntico
-    try:
-        logger.info("🔄 Llamando a search_wines_with_agentic_rag...")
-        search_result = await search_wines_with_agentic_rag(user_prompt, user_id)
-        logger.info("✅ search_wines_with_agentic_rag completado")
-    except Exception as e:
-        logger.error(f"💥 Error en search_wines_with_agentic_rag: {e}")
-        logger.error(f"🔍 Tipo de error: {type(e)}")
-        # Fallback directo
-        search_result = {"sources": [], "expanded_queries": [], "error": str(e)}
-    
+    # 1. Búsqueda resiliente con RAG agéntico
+    search_result = await search_wines_with_agentic_rag(user_prompt, user_id)
     wines_found = len(search_result.get('sources', []))
     expanded_queries = search_result.get('expanded_queries', [])
     
-    # 2. Generar respuesta conversacional agéntica
-    logger.info("🤖 Generando respuesta con IA agéntica...")
+    # 2. Generar respuesta (tu lógica existente)
     conversational_response = await generate_agentic_response(user_prompt, search_result, user_id)
     
-    # 3. Guardar interacción en memoria para futuras consultas
-    await save_user_interaction(user_id, user_prompt, conversational_response, search_result.get('sources', []))
+    # 3. Guardar interacción resiliente
+    await save_user_interaction_resilient(user_id, user_prompt, conversational_response, search_result.get('sources', []))
     
     return RecommendationResponse(
         response=conversational_response,
@@ -352,45 +352,85 @@ async def handle_agentic_query(query: Query = Body(...)):
     )
 
 @app.get("/health")
-async def health_check():
-    """Endpoint de salud del servicio."""
+async def health_check_resilient():
+    """Health check con información del circuit breaker"""
     try:
-        # Verificar conectividad con servicios MCP
-        async with httpx.AsyncClient() as client:
-            rag_health = await client.get(f"{RAG_MCP_URL}/health", timeout=3.0)
-            memory_health = await client.get(f"{MEMORY_MCP_URL}/health", timeout=3.0)
-            
-            return {
-                "status": "healthy",
-                "services": {
-                    "rag_mcp": rag_health.status_code == 200,
-                    "memory_mcp": memory_health.status_code == 200,
-                    "deepseek": deepseek_client is not None
-                }
+        # Verificar servicios con timeout corto usando el cliente simple
+        services_status = {"rag_mcp": False, "memory_mcp": False}
+        
+        try:
+            await resilient_client.get_simple(f"{RAG_MCP_URL}/health")
+            services_status["rag_mcp"] = True
+        except Exception as e:
+            logger.warning(f"RAG MCP health check failed: {e}")
+        
+        try:
+            await resilient_client.get_simple(f"{MEMORY_MCP_URL}/health")
+            services_status["memory_mcp"] = True
+        except Exception as e:
+            logger.warning(f"Memory MCP health check failed: {e}")
+        
+        # Información del circuit breaker
+        circuit_info = resilient_client.get_circuit_info()
+        
+        # Determinar estado general
+        all_healthy = services_status["rag_mcp"] and services_status["memory_mcp"]
+        status = "healthy" if all_healthy else "degraded"
+        
+        return {
+            "status": status,
+            "circuit_breaker": circuit_info,
+            "services": {
+                **services_status,
+                "openai": openai_client is not None
+            },
+            "config": {
+                "rag_url": RAG_MCP_URL,
+                "memory_url": MEMORY_MCP_URL,
+                "openai_model": OPENAI_MODEL
             }
+        }
+        
     except Exception as e:
         return {
-            "status": "degraded", 
+            "status": "error", 
             "error": str(e),
+            "circuit_breaker": resilient_client.get_circuit_info(),
             "services": {
                 "rag_mcp": False,
                 "memory_mcp": False,
-                "deepseek": deepseek_client is not None
+                "openai": openai_client is not None
             }
         }
 
 @app.get("/stats")
-async def get_stats():
-    """Estadísticas del sumiller agéntico."""
+async def get_stats_resilient():
+    """Estadísticas del sumiller agéntico con información resiliente"""
     try:
-        async with httpx.AsyncClient() as client:
-            rag_stats = await client.get(f"{RAG_MCP_URL}/stats", timeout=5.0)
-            memory_stats = await client.get(f"{MEMORY_MCP_URL}/stats", timeout=5.0)
-            
-            return {
-                "rag_stats": rag_stats.json() if rag_stats.status_code == 200 else {},
-                "memory_stats": memory_stats.json() if memory_stats.status_code == 200 else {}
-            }
+        stats = {"rag_stats": {}, "memory_stats": {}, "client_stats": {}}
+        
+        # Intentar obtener stats de RAG
+        try:
+            rag_stats = await resilient_client.get_with_retry(f"{RAG_MCP_URL}/stats", max_retries=1)
+            stats["rag_stats"] = rag_stats
+        except Exception as e:
+            stats["rag_stats"] = {"error": str(e)}
+        
+        # Intentar obtener stats de Memory
+        try:
+            memory_stats = await resilient_client.get_with_retry(f"{MEMORY_MCP_URL}/stats", max_retries=1)
+            stats["memory_stats"] = memory_stats
+        except Exception as e:
+            stats["memory_stats"] = {"error": str(e)}
+        
+        # Stats del cliente resiliente
+        stats["client_stats"] = {
+            "circuit_breaker": resilient_client.get_circuit_info(),
+            "pool_initialized": resilient_client.pool._client is not None
+        }
+        
+        return stats
+        
     except Exception as e:
         return {"error": f"No se pudieron obtener estadísticas: {e}"}
 

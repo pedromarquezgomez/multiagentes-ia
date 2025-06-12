@@ -22,9 +22,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuración global
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", os.getenv("OPENAI_API_KEY"))
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
 CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8001"))
 
@@ -46,12 +46,12 @@ class SimpleRAGEngine:
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         self.vector_db = None
         self.collection = None
-        self.deepseek_client = None
+        self.openai_client = None
         
-        if DEEPSEEK_API_KEY:
-            self.deepseek_client = openai.OpenAI(
-                api_key=DEEPSEEK_API_KEY,
-                base_url=DEEPSEEK_BASE_URL
+        if OPENAI_API_KEY:
+            self.openai_client = openai.OpenAI(
+                api_key=OPENAI_API_KEY,
+                base_url=OPENAI_BASE_URL
             )
     
     async def initialize(self):
@@ -189,19 +189,19 @@ async def query_endpoint(query_data: QueryRequest):
             sources.append(source_entry)
             context_str += f"Fuente {i+1}:\n{doc_content}\n\n"
 
-        # Paso 3: Generar respuesta usando DeepSeek
-        start_deepseek_call = time.time()
+        # Paso 3: Generar respuesta usando OpenAI
+        start_openai_call = time.time()
         
-        if rag_engine.deepseek_client and context_str.strip():
-            logger.info("🤖 Llamando a DeepSeek...")
+        if rag_engine.openai_client and context_str.strip():
+            logger.info("🤖 Llamando a OpenAI...")
             
             messages = [
                 {"role": "system", "content": "Eres un asistente sumiller experto. Usa el contexto proporcionado para responder a las preguntas sobre vinos. Si no puedes encontrar la respuesta en el contexto, indica que no tienes esa información. No alucines."},
                 {"role": "user", "content": f"Contexto:\n{context_str}\n\nPregunta: {query_data.query}"}
             ]
             
-            response = rag_engine.deepseek_client.chat.completions.create(
-                model=DEEPSEEK_MODEL,
+            response = rag_engine.openai_client.chat.completions.create(
+                model=OPENAI_MODEL,
                 messages=messages,
                 temperature=0.7,
                 max_tokens=1024,
@@ -215,11 +215,11 @@ async def query_endpoint(query_data: QueryRequest):
         elif not context_str.strip():
             llm_answer = f"No encontré información relevante en la base de conocimiento para la consulta: '{query_data.query}'"
         else:
-            llm_answer = f"Basado en {len(sources)} fuentes encontradas para: '{query_data.query}' (DeepSeek no disponible)"
+            llm_answer = f"Basado en {len(sources)} fuentes encontradas para: '{query_data.query}' (OpenAI no disponible)"
         
-        end_deepseek_call = time.time()
-        deepseek_time = end_deepseek_call - start_deepseek_call
-        logger.info(f"⏱️  DEEPSEEK: {deepseek_time:.4f}s")
+        end_openai_call = time.time()
+        openai_time = end_openai_call - start_openai_call
+        logger.info(f"⏱️  OPENAI: {openai_time:.4f}s")
 
         end_total = time.time()
         total_time = end_total - start_total
@@ -234,7 +234,7 @@ async def query_endpoint(query_data: QueryRequest):
             "timing": {
                 "embedding": f"{embedding_time:.4f}s",
                 "chromadb_search": f"{chroma_time:.4f}s",
-                "deepseek_call": f"{deepseek_time:.4f}s",
+                "openai_call": f"{openai_time:.4f}s",
                 "total": f"{total_time:.4f}s"
             }
         }

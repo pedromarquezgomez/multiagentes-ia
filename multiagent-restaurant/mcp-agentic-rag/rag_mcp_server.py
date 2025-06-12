@@ -34,9 +34,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuración global
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", os.getenv("OPENAI_API_KEY"))  # Fallback a OpenAI key si DeepSeek no está disponible
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
 VECTOR_DB_TYPE = os.getenv("VECTOR_DB_TYPE", "chroma")
 CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8001"))
@@ -64,12 +64,12 @@ class AgenticRAGEngine:
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         self.vector_db = None
         self.collection = None
-        self.deepseek_client = None
+        self.openai_client = None
         
-        if DEEPSEEK_API_KEY:
-            self.deepseek_client = openai.OpenAI(
-                api_key=DEEPSEEK_API_KEY,
-                base_url=DEEPSEEK_BASE_URL
+        if OPENAI_API_KEY:
+            self.openai_client = openai.OpenAI(
+                api_key=OPENAI_API_KEY,
+                base_url=OPENAI_BASE_URL
             )
     
     async def initialize(self):
@@ -172,8 +172,8 @@ class AgenticRAGEngine:
     
     async def agentic_query_expansion(self, query: str, context: Dict[str, Any] = None) -> List[str]:
         """Expansión agéntica de consultas usando LLM"""
-        if not self.deepseek_client:
-            return [query]  # Fallback si no hay DeepSeek
+        if not self.openai_client:
+            return [query]  # Fallback si no hay OpenAI
         
         try:
             system_prompt = """Eres un experto en expandir consultas para mejorar la recuperación de información.
@@ -189,8 +189,8 @@ class AgenticRAGEngine:
             Genera 3-5 variaciones de esta consulta para mejorar la búsqueda.
             """
             
-            response = self.deepseek_client.chat.completions.create(
-                model=DEEPSEEK_MODEL,
+            response = self.openai_client.chat.completions.create(
+                model=OPENAI_MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -220,7 +220,7 @@ class AgenticRAGEngine:
     
     async def generate_answer(self, query: str, sources: List[Dict[str, Any]], context: Dict[str, Any] = None) -> str:
         """Generar respuesta usando LLM con fuentes recuperadas"""
-        if not self.deepseek_client:
+        if not self.openai_client:
             # Fallback sin LLM
             return f"Basado en {len(sources)} fuentes encontradas para: '{query}'"
         
@@ -246,8 +246,8 @@ class AgenticRAGEngine:
             Responde la pregunta basándote únicamente en las fuentes proporcionadas.
             """
             
-            response = self.deepseek_client.chat.completions.create(
-                model=DEEPSEEK_MODEL,
+            response = self.openai_client.chat.completions.create(
+                model=OPENAI_MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -504,15 +504,65 @@ async def startup_event():
     # Cargar documentos de ejemplo si existen
     knowledge_dir = Path("/app/knowledge_base")
     if knowledge_dir.exists():
+        # Cargar archivos de texto
         for file_path in knowledge_dir.glob("*.txt"):
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
                     metadata = {"source": file_path.name, "type": "text"}
                     await rag_engine.add_document(content, metadata, file_path.stem)
-                logger.info(f"Documento cargado: {file_path.name}")
+                logger.info(f"Documento de texto cargado: {file_path.name}")
             except Exception as e:
-                logger.error(f"Error cargando {file_path}: {e}")
+                logger.error(f"Error cargando archivo de texto {file_path}: {e}")
+        
+        # Cargar archivos JSON (vinos)
+        for file_path in knowledge_dir.glob("*.json"):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    
+                # Si es el archivo de vinos
+                if file_path.name == "vinos.json" and isinstance(data, list):
+                    logger.info(f"Cargando {len(data)} vinos desde {file_path.name}")
+                    for i, vino in enumerate(data):
+                        # Crear contenido estructurado para cada vino
+                        content = f"""Vino: {vino.get('name', 'Sin nombre')}
+Tipo: {vino.get('type', 'Sin tipo')}
+Región: {vino.get('region', 'Sin región')}
+Año: {vino.get('vintage', 'Sin año')}
+Precio: {vino.get('price', 'Sin precio')}€
+Stock: {vino.get('stock', 'Sin stock')} unidades
+Maridaje: {vino.get('pairing', 'Sin maridaje')}
+Descripción: {vino.get('description', 'Sin descripción')}
+Puntuación: {vino.get('rating', 'Sin puntuación')}/100"""
+                        
+                        # Metadata rica para búsquedas
+                        metadata = {
+                            "source": file_path.name,
+                            "type": "vino",
+                            "name": vino.get('name', ''),
+                            "wine_type": vino.get('type', ''),
+                            "region": vino.get('region', ''),
+                            "vintage": vino.get('vintage', ''),
+                            "price": vino.get('price', ''),
+                            "rating": vino.get('rating', ''),
+                            "pairing": vino.get('pairing', ''),
+                            "index": i
+                        }
+                        
+                        doc_id = f"vino_{i}_{vino.get('name', 'sin_nombre').replace(' ', '_')}"
+                        await rag_engine.add_document(content, metadata, doc_id)
+                    
+                    logger.info(f"✅ {len(data)} vinos cargados exitosamente desde {file_path.name}")
+                else:
+                    # Para otros archivos JSON, cargar como documento único
+                    content = json.dumps(data, indent=2, ensure_ascii=False)
+                    metadata = {"source": file_path.name, "type": "json"}
+                    await rag_engine.add_document(content, metadata, file_path.stem)
+                    logger.info(f"Documento JSON cargado: {file_path.name}")
+                    
+            except Exception as e:
+                logger.error(f"Error cargando archivo JSON {file_path}: {e}")
 
 @app.get("/health")
 async def health_check():
@@ -563,17 +613,17 @@ async def query_rag_mcp(query_data: QueryRequest):
             sources.append(source_entry)
             context_str += f"Fuente {i+1}:\n{doc_content}\n\n"
 
-        # Paso 3: Generar respuesta usando DeepSeek
-        start_deepseek_call = time.time()
+        # Paso 3: Generar respuesta usando OpenAI
+        start_openai_call = time.time()
         
-        if rag_engine.deepseek_client:
+        if rag_engine.openai_client:
             messages = [
                 {"role": "system", "content": "Eres un asistente sumiller experto. Usa el contexto proporcionado para responder a las preguntas sobre vinos. Si no puedes encontrar la respuesta en el contexto, indica que no tienes esa información. No alucines."},
                 {"role": "user", "content": f"Contexto:\n{context_str}\n\nPregunta: {query_data.query}"}
             ]
             
-            response = rag_engine.deepseek_client.chat.completions.create(
-                model=DEEPSEEK_MODEL,
+            response = rag_engine.openai_client.chat.completions.create(
+                model=OPENAI_MODEL,
                 messages=messages,
                 temperature=0.7,
                 max_tokens=1024,
@@ -587,8 +637,8 @@ async def query_rag_mcp(query_data: QueryRequest):
         else:
             llm_answer = f"Basado en {len(sources)} fuentes encontradas para: '{query_data.query}'"
         
-        end_deepseek_call = time.time()
-        logger.info(f"Tiempo para la llamada a DeepSeek: {end_deepseek_call - start_deepseek_call:.4f}s")
+        end_openai_call = time.time()
+        logger.info(f"Tiempo para la llamada a OpenAI: {end_openai_call - start_openai_call:.4f}s")
 
         end_total = time.time()
         logger.info(f"Tiempo total de la solicitud /query: {end_total - start_total:.4f}s")

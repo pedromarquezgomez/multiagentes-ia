@@ -525,6 +525,79 @@ async def health_check():
     except:
         return {"status": "unhealthy", "redis": "disconnected"}
 
+# --- Endpoints REST para el sumiller-bot ---
+
+@app.get("/memory/{user_id}")
+async def get_user_memory(user_id: str):
+    """Obtener memoria del usuario"""
+    try:
+        # Obtener historial de conversación
+        conversation_history = await memory_manager.get_conversation_history(user_id, limit=10)
+        
+        # Obtener preferencias del usuario
+        user_preferences = await memory_manager.get_user_preferences(user_id)
+        
+        return {
+            "user_id": user_id,
+            "conversation_history": conversation_history,
+            "preferences": user_preferences,
+            "status": "success"
+        }
+    except Exception as e:
+        logger.error(f"Error obteniendo memoria del usuario {user_id}: {e}")
+        return {
+            "user_id": user_id,
+            "conversation_history": [],
+            "preferences": {},
+            "status": "error",
+            "error": str(e)
+        }
+
+@app.post("/memory/save")
+async def save_user_memory(data: dict):
+    """Guardar interacción del usuario"""
+    try:
+        user_id = data.get("user_id", "default_user")
+        query = data.get("query", "")
+        response = data.get("response", "")
+        context = data.get("context", {})
+        
+        # Guardar conversación
+        conversation_id = await memory_manager.store_conversation(
+            session_id=user_id,
+            user_query=query,
+            response=response,
+            context=context
+        )
+        
+        return {
+            "status": "success",
+            "conversation_id": conversation_id,
+            "user_id": user_id
+        }
+    except Exception as e:
+        logger.error(f"Error guardando memoria: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+@app.get("/stats")
+async def get_memory_stats():
+    """Obtener estadísticas de memoria"""
+    try:
+        stats = await memory_manager.get_memory_stats()
+        return {
+            "status": "success",
+            "stats": stats
+        }
+    except Exception as e:
+        logger.error(f"Error obteniendo estadísticas: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
 async def main():
     """Función principal"""
     if len(sys.argv) > 1 and sys.argv[1] == "http":

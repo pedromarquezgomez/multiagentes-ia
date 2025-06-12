@@ -89,6 +89,14 @@ class Config:
                 return f.read().strip()
         return os.getenv('OPENAI_API_KEY')
     
+    def get_openai_base_url(self):
+        """Obtiene la URL base de OpenAI."""
+        return os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1')
+    
+    def get_openai_model(self):
+        """Obtiene el modelo de OpenAI a usar."""
+        return os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo')
+    
     def get_service_url(self, service_name: str) -> str:
         """Obtiene la URL de un servicio específico."""
         if service_name == 'sumiller':

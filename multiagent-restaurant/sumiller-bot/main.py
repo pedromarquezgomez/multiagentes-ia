@@ -6,11 +6,11 @@ Utiliza el nuevo sistema MCP Agentic RAG para búsqueda semántica avanzada y ge
 2. Utiliza memoria conversacional para personalización.
 3. Genera respuestas conversacionales mejoradas.
 """
-import json
 import os
 import sys
 import logging
 import httpx
+import json
 from openai import AsyncOpenAI
 from typing import List, Dict, Any
 from fastapi import FastAPI, HTTPException, Body
@@ -29,16 +29,24 @@ logger = logging.getLogger(__name__)
 PORT = int(os.getenv("PORT", str(config.sumiller_port if config.is_local() else 8080)))
 
 # URLs de los nuevos servicios MCP Agentic RAG
-RAG_MCP_URL = config.get_service_url('rag-mcp') if hasattr(config, 'get_service_url') else "http://localhost:8000"
-MEMORY_MCP_URL = config.get_service_url('memory-mcp') if hasattr(config, 'get_service_url') else "http://localhost:8002"
+RAG_MCP_URL = os.getenv('RAG_MCP_URL', "http://localhost:8000")
+MEMORY_MCP_URL = os.getenv('MEMORY_MCP_URL', "http://localhost:8002")
 
-OPENAI_API_KEY = config.get_openai_key()
+# Configuración DeepSeek
+DEEPSEEK_API_KEY = config.get_deepseek_key()
+DEEPSEEK_BASE_URL = config.get_deepseek_base_url()
+DEEPSEEK_MODEL = config.get_deepseek_model()
 
-if not OPENAI_API_KEY:
-    logger.warning("No se pudo obtener la OpenAI API Key. Las llamadas a OpenAI no funcionarán.")
-    openai_client = None
+if not DEEPSEEK_API_KEY:
+    logger.warning("No se pudo obtener la DeepSeek API Key. Las llamadas a DeepSeek no funcionarán.")
+    deepseek_client = None
 else:
-    openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+    # Usar el cliente OpenAI pero con la configuración de DeepSeek
+    deepseek_client = AsyncOpenAI(
+        api_key=DEEPSEEK_API_KEY,
+        base_url=DEEPSEEK_BASE_URL
+    )
+    logger.info(f"✅ Cliente DeepSeek configurado: {DEEPSEEK_BASE_URL} - Modelo: {DEEPSEEK_MODEL}")
 
 app = FastAPI(
     title="Sumiller Bot API - Agentic RAG",
@@ -69,25 +77,36 @@ class RecommendationResponse(BaseModel):
 
 async def search_wines_with_agentic_rag(user_query: str, user_id: str = "default_user") -> Dict[str, Any]:
     """Utiliza el nuevo sistema MCP Agentic RAG para búsqueda semántica avanzada."""
+    logger.info(f"🔍 Iniciando búsqueda RAG para: '{user_query}'")
+    logger.info(f"🔗 URL del RAG MCP: {RAG_MCP_URL}")
+    
     async with httpx.AsyncClient() as client:
         try:
             # 1. Primero, obtener contexto de memoria si existe
+            logger.info("💾 Obteniendo contexto de memoria...")
             memory_context = await get_user_memory(user_id, client)
+            logger.info(f"💾 Contexto de memoria obtenido: {bool(memory_context)}")
             
             # 2. Realizar búsqueda con RAG agéntico
             rag_payload = {
                 "query": user_query,
-                "user_id": user_id,
-                "context": memory_context,
-                "max_results": 5,
-                "expand_query": True  # Habilitar expansión agéntica
+                "max_results": 3  # Reducido para menor latencia
             }
+            
+            # Solo agregar contexto si existe para reducir payload
+            if memory_context:
+                rag_payload["context"] = memory_context
+            
+            logger.info(f"📤 Enviando payload a {RAG_MCP_URL}/query")
+            logger.info(f"📦 Payload: {rag_payload}")
             
             response = await client.post(
                 f"{RAG_MCP_URL}/query",
                 json=rag_payload,
-                timeout=15.0
+                timeout=30.0  # Aumentado para búsquedas complejas
             )
+            
+            logger.info(f"📡 Respuesta recibida: status={response.status_code}")
             response.raise_for_status()
             search_result = response.json()
             
@@ -98,10 +117,16 @@ async def search_wines_with_agentic_rag(user_query: str, user_id: str = "default
             
         except httpx.RequestError as e:
             logger.error(f"Error al conectar con RAG MCP Server: {e}")
+            logger.error(f"URL intentada: {RAG_MCP_URL}/query")
             # Fallback: búsqueda simple si RAG falla
             return await simple_search_fallback(user_query, client)
         except httpx.HTTPStatusError as e:
             logger.error(f"RAG MCP Server devolvió un error: {e.response.status_code}")
+            logger.error(f"Respuesta del servidor: {e.response.text}")
+            return await simple_search_fallback(user_query, client)
+        except Exception as e:
+            logger.error(f"Error inesperado en RAG MCP: {e}")
+            logger.error(f"Tipo de error: {type(e)}")
             return await simple_search_fallback(user_query, client)
 
 async def get_user_memory(user_id: str, client: httpx.AsyncClient) -> Dict[str, Any]:
@@ -148,15 +173,20 @@ async def simple_search_fallback(user_query: str, client: httpx.AsyncClient) -> 
     """Búsqueda simple de fallback si RAG agéntico no está disponible."""
     try:
         # Intentar búsqueda básica en el servicio RAG
+        logger.info(f"🔄 Intentando fallback con URL: {RAG_MCP_URL}/query")
         response = await client.post(
             f"{RAG_MCP_URL}/query",
-            json={"query": user_query, "max_results": 5},
-            timeout=10.0
+            json={"query": user_query, "max_results": 3},
+            timeout=20.0  # Timeout más generoso para fallback
         )
+        logger.info(f"📡 Respuesta fallback status: {response.status_code}")
         if response.status_code == 200:
-            return response.json()
-    except Exception:
-        pass
+            result = response.json()
+            logger.info(f"✅ Fallback exitoso: {len(result.get('sources', []))} fuentes encontradas")
+            return result
+    except Exception as e:
+        logger.error(f"❌ Error en fallback: {e}")
+        logger.error(f"🔍 Tipo de error en fallback: {type(e)}")
     
     # Si todo falla, respuesta vacía
     logger.warning("Fallback: No hay servicios de búsqueda disponibles")
@@ -168,8 +198,8 @@ async def generate_agentic_response(user_query: str, search_result: Dict[str, An
     """
     Genera una respuesta conversacional usando el contexto completo del RAG agéntico.
     """
-    if not openai_client:
-        return f"La API de OpenAI no está configurada. Resultados: {json.dumps(search_result.get('sources', []))}"
+    if not deepseek_client:
+        return f"La API de DeepSeek no está configurada. Resultados: {json.dumps(search_result.get('sources', []))}"
 
     documents = search_result.get('sources', [])  # RAG MCP devuelve 'sources' no 'documents'
     expanded_queries = search_result.get('expanded_queries', [])
@@ -266,8 +296,8 @@ async def generate_agentic_response(user_query: str, search_result: Dict[str, An
         """
     
     try:
-        response = await openai_client.chat.completions.create(
-            model="gpt-4-turbo",
+        response = await deepseek_client.chat.completions.create(
+            model=DEEPSEEK_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content}
@@ -277,7 +307,7 @@ async def generate_agentic_response(user_query: str, search_result: Dict[str, An
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        logger.error(f"Error al generar respuesta agéntica con OpenAI: {e}")
+        logger.error(f"Error al generar respuesta agéntica con DeepSeek: {e}")
         # Fallback response
         if documents:
             return f"Encontré {len(documents)} vinos relevantes: " + ", ".join([doc.get('metadata', {}).get('name', 'Sin nombre') for doc in documents[:3]])
@@ -295,7 +325,15 @@ async def handle_agentic_query(query: Query = Body(...)):
     logger.info(f"🧠 Nueva consulta agéntica de {user_id}: \"{user_prompt}\"")
 
     # 1. Búsqueda con RAG agéntico
-    search_result = await search_wines_with_agentic_rag(user_prompt, user_id)
+    try:
+        logger.info("🔄 Llamando a search_wines_with_agentic_rag...")
+        search_result = await search_wines_with_agentic_rag(user_prompt, user_id)
+        logger.info("✅ search_wines_with_agentic_rag completado")
+    except Exception as e:
+        logger.error(f"💥 Error en search_wines_with_agentic_rag: {e}")
+        logger.error(f"🔍 Tipo de error: {type(e)}")
+        # Fallback directo
+        search_result = {"sources": [], "expanded_queries": [], "error": str(e)}
     
     wines_found = len(search_result.get('sources', []))
     expanded_queries = search_result.get('expanded_queries', [])
@@ -327,7 +365,7 @@ async def health_check():
                 "services": {
                     "rag_mcp": rag_health.status_code == 200,
                     "memory_mcp": memory_health.status_code == 200,
-                    "openai": openai_client is not None
+                    "deepseek": deepseek_client is not None
                 }
             }
     except Exception as e:
@@ -337,7 +375,7 @@ async def health_check():
             "services": {
                 "rag_mcp": False,
                 "memory_mcp": False,
-                "openai": openai_client is not None
+                "deepseek": deepseek_client is not None
             }
         }
 

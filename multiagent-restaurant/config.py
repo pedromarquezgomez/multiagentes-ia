@@ -61,8 +61,27 @@ class Config:
         # Puerto desde variable de entorno (Cloud Run)
         self.port = int(os.getenv('PORT', '8080'))
     
+    # --- MÉTODOS DEEPSEEK (NUEVOS) ---
+    def get_deepseek_key(self):
+        """Obtiene la API key de DeepSeek de forma segura."""
+        # Prioridad: 1) Secreto montado, 2) Variable de entorno
+        secret_path = "/run/secrets/deepseek-api-key"
+        if os.path.exists(secret_path):
+            with open(secret_path, "r") as f:
+                return f.read().strip()
+        return os.getenv('DEEPSEEK_API_KEY')
+    
+    def get_deepseek_base_url(self):
+        """Obtiene la URL base de DeepSeek."""
+        return os.getenv('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
+    
+    def get_deepseek_model(self):
+        """Obtiene el modelo de DeepSeek a usar."""
+        return os.getenv('DEEPSEEK_MODEL', 'deepseek-chat')
+    
+    # --- MÉTODOS OPENAI (COMPATIBILIDAD) ---
     def get_openai_key(self):
-        """Obtiene la API key de OpenAI de forma segura."""
+        """Obtiene la API key de OpenAI de forma segura (fallback)."""
         # Prioridad: 1) Secreto montado, 2) Variable de entorno
         secret_path = "/run/secrets/openai-api-key"
         if os.path.exists(secret_path):
@@ -100,6 +119,7 @@ Config Summary:
   Sumiller URL: {self.sumiller_url}
   RAG MCP URL: {self.rag_mcp_url}
   Memory MCP URL: {self.memory_mcp_url}
+  DeepSeek Key: {'✓ Configured' if self.get_deepseek_key() else '✗ Missing'}
   OpenAI Key: {'✓ Configured' if self.get_openai_key() else '✗ Missing'}
         """.strip()
 

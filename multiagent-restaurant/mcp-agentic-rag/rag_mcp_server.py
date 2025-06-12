@@ -33,7 +33,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuración global
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", os.getenv("OPENAI_API_KEY"))  # Fallback a OpenAI key si DeepSeek no está disponible
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 VECTOR_DB_TYPE = os.getenv("VECTOR_DB_TYPE", "chroma")
 CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8001"))
@@ -61,10 +63,13 @@ class AgenticRAGEngine:
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         self.vector_db = None
         self.collection = None
-        self.openai_client = None
+        self.deepseek_client = None
         
-        if OPENAI_API_KEY:
-            self.openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        if DEEPSEEK_API_KEY:
+            self.deepseek_client = openai.OpenAI(
+                api_key=DEEPSEEK_API_KEY,
+                base_url=DEEPSEEK_BASE_URL
+            )
     
     async def initialize(self):
         """Inicializar conexiones a bases de datos vectoriales"""
@@ -166,8 +171,8 @@ class AgenticRAGEngine:
     
     async def agentic_query_expansion(self, query: str, context: Dict[str, Any] = None) -> List[str]:
         """Expansión agéntica de consultas usando LLM"""
-        if not self.openai_client:
-            return [query]  # Fallback si no hay OpenAI
+        if not self.deepseek_client:
+            return [query]  # Fallback si no hay DeepSeek
         
         try:
             system_prompt = """Eres un experto en expandir consultas para mejorar la recuperación de información.
@@ -183,8 +188,8 @@ class AgenticRAGEngine:
             Genera 3-5 variaciones de esta consulta para mejorar la búsqueda.
             """
             
-            response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
+            response = self.deepseek_client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -214,7 +219,7 @@ class AgenticRAGEngine:
     
     async def generate_answer(self, query: str, sources: List[Dict[str, Any]], context: Dict[str, Any] = None) -> str:
         """Generar respuesta usando LLM con fuentes recuperadas"""
-        if not self.openai_client:
+        if not self.deepseek_client:
             # Fallback sin LLM
             return f"Basado en {len(sources)} fuentes encontradas para: '{query}'"
         
@@ -240,8 +245,8 @@ class AgenticRAGEngine:
             Responde la pregunta basándote únicamente en las fuentes proporcionadas.
             """
             
-            response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
+            response = self.deepseek_client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}

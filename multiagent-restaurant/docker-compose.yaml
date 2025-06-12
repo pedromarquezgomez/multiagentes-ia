@@ -15,7 +15,9 @@ services:
       - "8000:8000"
     environment:
       - ENVIRONMENT=local
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL}
       - VECTOR_DB_TYPE=chroma
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
@@ -81,10 +83,10 @@ services:
     command: redis-server --appendonly yes
 
   # ======================
-  # SERVICIOS PRINCIPALES
+  # SERVICIO PRINCIPAL ÚNICO
   # ======================
 
-  # Sumiller Bot Agéntico (actualizado)
+  # Sumiller Bot Agéntico (ÚNICO BOT - No hay maitre-bot)
   sumiller-bot:
     build: 
       context: ./sumiller-bot
@@ -94,12 +96,16 @@ services:
     environment:
       - ENVIRONMENT=local
       - PORT=8001
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL}
       - SUMILLER_PORT=8001
       - RAG_MCP_PORT=8000
       - MEMORY_MCP_PORT=8002
       - CLOUD_RAG_MCP_URL=http://rag-mcp-server:8000
       - CLOUD_MEMORY_MCP_URL=http://memory-mcp-server:8000
+      - RAG_MCP_URL=http://rag-mcp-server:8000
+      - MEMORY_MCP_URL=http://memory-mcp-server:8000
     volumes:
       - ./config.py:/app/config.py:ro
     networks:
@@ -113,7 +119,7 @@ services:
       timeout: 10s
       retries: 3
 
-  # UI Frontend (actualizado)
+  # UI Frontend - Llama directamente al sumiller-bot
   ui:
     build: 
       context: ./ui

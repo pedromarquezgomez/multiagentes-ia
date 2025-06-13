@@ -1,6 +1,6 @@
 [build]
 builder = "dockerfile"
-dockerfilePath = "multiagent-restaurant/mcp-agentic-rag/Dockerfile.railway"
+dockerfilePath = "Dockerfile.rag"
 
 [deploy]
 startCommand = "python start_server_main.py" 

@@ -1,0 +1,38 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instalar dependencias del sistema necesarias para ChromaDB y sentence-transformers
+RUN apt-get update && apt-get install -y \
+    gcc g++ \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar y instalar dependencias Python completas
+COPY multiagent-restaurant/mcp-agentic-rag/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar código completo del RAG MCP Server
+COPY multiagent-restaurant/mcp-agentic-rag/rag_mcp_server.py .
+COPY multiagent-restaurant/mcp-agentic-rag/start_server_main.py .
+
+# Copiar base de conocimiento
+COPY multiagent-restaurant/mcp-agentic-rag/knowledge_base/ ./knowledge_base/
+
+# Crear directorios necesarios
+RUN mkdir -p /app/data /app/.chromadb
+
+# Variables de entorno para Railway - Versión Completa
+ENV PYTHONUNBUFFERED=1
+ENV ENVIRONMENT=railway
+ENV VECTOR_DB_TYPE=chroma
+ENV USE_EMBEDDED_CHROMA=true
+ENV HOST=0.0.0.0
+ENV PORT=${PORT:-8000}
+
+# Puerto dinámico Railway
+EXPOSE $PORT
+
+# Comando de inicio - RAG MCP Server completo
+CMD python start_server_main.py 

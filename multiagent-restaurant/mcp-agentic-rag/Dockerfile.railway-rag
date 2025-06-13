@@ -1,0 +1,30 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    gcc g++ curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar código
+COPY rag_mcp_server.py .
+COPY start_server_main.py .
+COPY knowledge_base/ ./knowledge_base/
+
+# Variables de entorno para Railway
+ENV PYTHONUNBUFFERED=1
+ENV ENVIRONMENT=railway
+ENV VECTOR_DB_TYPE=chroma
+ENV CHROMA_HOST=localhost
+ENV CHROMA_PORT=8001
+
+# Puerto dinámico
+EXPOSE $PORT
+
+# Comando de inicio
+CMD python start_server_main.py

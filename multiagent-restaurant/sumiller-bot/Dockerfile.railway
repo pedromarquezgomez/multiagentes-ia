@@ -1,0 +1,34 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    curl gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar requirements y instalar
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar código fuente
+COPY main.py .
+COPY query_filter.py .
+COPY http_client.py .
+
+# Copiar config.py desde la raíz del proyecto
+COPY ../config.py .
+
+# Variables de entorno
+ENV PYTHONUNBUFFERED=1
+ENV ENVIRONMENT=railway
+
+# Puerto dinámico de Railway
+EXPOSE $PORT
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:$PORT/health || exit 1
+
+# Comando de inicio
+CMD uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1

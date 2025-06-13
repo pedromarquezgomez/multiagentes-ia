@@ -1,47 +1,54 @@
 # 🍷 Sistema Sumiller Virtual con RAG Agéntico
 
-Sistema inteligente de recomendación de vinos que utiliza **DeepSeek** y **MCP Agentic RAG** para proporcionar recomendaciones personalizadas y conversacionales.
+Sistema inteligente de recomendación de vinos que utiliza **OpenAI GPT-4o-mini** y **MCP Agentic RAG** para proporcionar recomendaciones personalizadas y conversacionales.
 
 ## 🏗️ Arquitectura Real Actual
 
 ```
-┌─────────────┐    HTTP     ┌─────────────────┐    MCP     ┌──────────────────┐
+┌─────────────┐    HTTPS    ┌─────────────────┐    MCP     ┌──────────────────┐
 │     UI      │────────────▶│  Sumiller Bot   │───────────▶│  RAG MCP Server  │
-│   (Vue.js)  │◀────────────│   (DeepSeek)    │◀───────────│  (Búsqueda +     │
-└─────────────┘             └─────────────────┘            │   Generación)    │
-                                     │                     └──────────────────┘
-                                     │ MCP                            │
-                                     ▼                                ▼
-                            ┌─────────────────┐              ┌──────────────────┐
-                            │ Memory MCP      │              │    ChromaDB      │
-                            │    Server       │              │ (Base Vectorial) │
-                            └─────────────────┘              └──────────────────┘
-                                     │
-                                     ▼
-                            ┌─────────────────┐
-                            │     Redis       │
-                            │   (Memoria)     │
-                            └─────────────────┘
+│ (Firebase)  │◀────────────│  (OpenAI GPT)   │◀───────────│  (ChromaDB +     │
+└─────────────┘             └─────────────────┘            │   Vectorización) │
+     🔥                              🚂                     └──────────────────┘
+                                     │                             🚂
+                                     │ MCP                         
+                                     ▼                         
+                            ┌─────────────────┐              
+                            │ Memory MCP      │              
+                            │    Server       │              
+                            └─────────────────┘              
+                                     │                       
+                                     ▼                       
+                            ┌─────────────────┐              
+                            │  Railway Redis  │              
+                            │   Database      │              
+                            └─────────────────┘              
+                                     🚂
 ```
+
+**🚂 Railway Backend** | **🔥 Firebase Frontend**
 
 ## 📁 Estructura del Proyecto
 
 ```
 multiagent-restaurant/
-├── sumiller-bot/           # ÚNICO BOT - Agente principal con DeepSeek
+├── sumiller-bot/           # 🤖 Agente principal con OpenAI GPT
 │   ├── main.py            # API FastAPI con integración MCP
-│   ├── config.py          # Configuración DeepSeek
-│   └── Dockerfile         
-├── mcp-agentic-rag/       # Sistema MCP de RAG Agéntico
+│   ├── config.py          # Configuración multi-entorno
+│   └── Dockerfile.railway # Dockerfile para Railway
+├── mcp-agentic-rag/       # 🔍 Sistema MCP de RAG Agéntico
 │   ├── rag_mcp_server.py  # Servidor de búsqueda semántica
 │   ├── memory_mcp_server.py # Servidor de memoria conversacional
-│   └── knowledge_base/    # Base de conocimientos de vinos
-├── ui/                    # Frontend Vue.js
+│   ├── knowledge_base/    # Base de conocimientos de vinos
+│   └── Dockerfile.railway-* # Dockerfiles para Railway
+├── ui/                    # 🎨 Frontend Vue.js
 │   ├── src/App.vue        # Interfaz principal
-│   └── Dockerfile         
-├── docker-compose.yaml    # Orquestación completa
-├── env.example           # Variables de entorno
-└── config.py             # Configuración global
+│   └── firebase.json      # Configuración Firebase
+├── railway*.json          # Configuraciones Railway
+├── *-deploy.sh           # Scripts de deployment
+├── verify-deployment.sh   # Script de verificación
+├── docker-compose.yaml    # Orquestación local
+└── config.py             # Configuración global multi-entorno
 ```
 
 ## 🚀 Inicio Rápido
@@ -82,41 +89,66 @@ python load-wines.py
 curl http://localhost:8000/stats
 ```
 
-## 🔧 Configuración DeepSeek
+## 🔧 Configuración OpenAI
 
 ### Obtener API Key
-1. Registrarse en [DeepSeek Platform](https://platform.deepseek.com/)
+1. Registrarse en [OpenAI Platform](https://platform.openai.com/)
 2. Crear una API Key
-3. Configurar en `.env`:
+3. Configurar en variables de entorno:
 
 ```bash
-DEEPSEEK_API_KEY=sk-your-deepseek-api-key-here
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-chat
+OPENAI_API_KEY=sk-your-openai-api-key-here
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
 ```
 
 ## 🌐 Despliegue en Producción
 
-### 🚂 Railway (Recomendado)
+### 🚂 Railway (Recomendado) - **CONFIGURACIÓN ACTUAL**
 
+#### **Estado del Deployment:**
+- ✅ **Sumiller Bot**: Funcionando completamente
+- ⏳ **RAG MCP Server**: Desplegando actualmente  
+- ❌ **Memory MCP + Redis**: Pendientes
+- ❌ **UI Firebase**: Pendiente
+
+#### **🚀 Deploy Rápido:**
 ```bash
 # 1. Instalar Railway CLI
 npm install -g @railway/cli
 
-# 2. Login en Railway
+# 2. Login en Railway  
 railway login
 
-# 3. Deploy automatizado
-chmod +x railway-deploy.sh
-./railway-deploy.sh
+# 3. Deploy servicios
+./railway-deploy.sh        # Deploy backend completo
+./firebase-deploy.sh       # Deploy frontend
+
+# 4. Verificar deployment
+./verify-deployment.sh
 ```
 
-**📋 Configuración Manual en Railway:**
-1. Crear base de datos Redis
-2. Configurar variables de entorno (ver `env.railway.example`)
-3. Verificar health checks
+#### **📋 URLs Actuales:**
+```bash
+# ✅ FUNCIONANDO:
+curl https://multiagentes-ia-production.up.railway.app/health
 
-Ver guía completa: `railway-setup.md`
+# 🧪 Test del Sumiller:
+curl -X POST https://multiagentes-ia-production.up.railway.app/query \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Recomienda vino para pasta", "user_id": "test"}'
+```
+
+#### **🔧 Configuración Variables (OpenAI):**
+```bash
+# Variables configuradas en Railway:
+ENVIRONMENT=railway
+OPENAI_API_KEY=sk-proj-xxxxx
+OPENAI_BASE_URL=https://api.openai.com/v1  
+OPENAI_MODEL=gpt-4o-mini
+```
+
+Ver guía completa: `railway-setup.md` | Scripts: `*-deploy.sh`
 
 ### Firebase + Google Cloud Run
 
@@ -135,13 +167,14 @@ firebase deploy
 
 ### URLs de Producción
 
-**Railway:**
-- **RAG MCP**: https://rag-mcp-server-xxxxx.railway.app
-- **Memory MCP**: https://memory-mcp-server-xxxxx.railway.app  
-- **Sumiller Bot**: https://sumiller-bot-xxxxx.railway.app
+**🚂 Railway (Backend):**
+- **✅ Sumiller Bot**: https://multiagentes-ia-production.up.railway.app
+- **⏳ RAG MCP**: https://rag-mcp-server-xxxxx.railway.app (desplegando)
+- **❌ Memory MCP**: (pendiente)
+- **❌ Redis Database**: (pendiente)
 
-**Firebase:**
-- **Frontend**: https://tu-proyecto.web.app
+**🔥 Firebase (Frontend):**
+- **❌ UI Frontend**: (pendiente deployment)
 
 **Google Cloud:**
 - **Frontend**: https://maitre-ia.web.app
@@ -174,10 +207,11 @@ curl http://localhost:8002/health
 ## 🎯 Características
 
 ### 🤖 **Agente Sumiller**
-- **DeepSeek LLM** para respuestas naturales
+- **OpenAI GPT-4o-mini** para respuestas naturales y rápidas
 - **RAG Agéntico** con expansión de consultas
-- **Memoria conversacional** personalizada
+- **Memoria conversacional** personalizada (opcional)
 - **Búsqueda semántica** en base de vinos
+- **Railway deployment** con auto-scaling
 
 ### 🔍 **RAG Avanzado**
 - **Expansión automática** de consultas
@@ -201,18 +235,19 @@ curl http://localhost:8002/health
 ### Variables de Entorno Principales
 
 ```bash
-# API DeepSeek (requerida)
-DEEPSEEK_API_KEY=sk-xxxxx
+# 🚂 RAILWAY PRODUCTION (Actual)
+ENVIRONMENT=railway
+OPENAI_API_KEY=sk-proj-xxxxx
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
 
-# Entorno
-ENVIRONMENT=local  # o 'cloud'
-
-# Puertos locales
+# 🏠 LOCAL DEVELOPMENT  
+ENVIRONMENT=local
 SUMILLER_PORT=8001
 RAG_MCP_PORT=8000
 MEMORY_MCP_PORT=8002
 
-# URLs Cloud Run (producción)
+# ☁️ GOOGLE CLOUD (Legacy)
 CLOUD_SUMILLER_URL=https://sumiller-bot-xxxxx.run.app
 CLOUD_RAG_MCP_URL=https://rag-mcp-server-xxxxx.run.app
 ```
@@ -238,11 +273,12 @@ Eres Sumy, un sumiller experto con...
 
 ### Problemas Comunes
 
-**❌ "DeepSeek API key not configured"**
+**❌ "OpenAI API key not configured"**
 ```bash
-# Verificar .env
-cat .env | grep DEEPSEEK_API_KEY
-# Debe mostrar tu API key válida
+# Verificar variables en Railway
+railway variables | grep OPENAI_API_KEY
+# O verificar en local
+cat .env | grep OPENAI_API_KEY
 ```
 
 **❌ "Error al conectar con RAG MCP Server"**
@@ -296,6 +332,38 @@ docker compose logs -f memory-mcp-server
 ## 📄 Licencia
 
 Este proyecto está bajo la Licencia MIT. Ver `LICENSE` para detalles.
+
+---
+
+## 🎯 **ESTADO ACTUAL DEL SISTEMA (Railway)**
+
+### ✅ **FUNCIONANDO:**
+- **Sumiller Bot API**: https://multiagentes-ia-production.up.railway.app
+- **Health Check**: `curl https://multiagentes-ia-production.up.railway.app/health`
+- **OpenAI Integration**: GPT-4o-mini configurado y funcionando
+- **Basic Wine Recommendations**: Sin base de conocimientos específica
+
+### ⏳ **EN PROCESO:**
+- **RAG MCP Server**: Desplegando para búsquedas semánticas
+- **Knowledge Base**: Base de datos vectorial de vinos
+
+### ❌ **PENDIENTES:**
+- **Memory MCP Server**: Memoria conversacional
+- **Redis Database**: Persistencia de conversaciones  
+- **UI Frontend**: Interfaz web en Firebase
+
+### 🧪 **TEST RÁPIDO:**
+```bash
+# Probar el sumiller actual
+curl -X POST https://multiagentes-ia-production.up.railway.app/query \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "¿Qué vino recomiendas para una cena romántica?", "user_id": "test"}'
+```
+
+### 📋 **PRÓXIMOS PASOS:**
+1. **Completar RAG MCP Server** → Mejor conocimiento de vinos
+2. **Desplegar Memory MCP** → Conversaciones personalizadas
+3. **Deploy UI Firebase** → Interfaz web completa
 
 ---
 

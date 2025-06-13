@@ -30,7 +30,7 @@ COPY mcp-agentic-rag/ ./mcp-agentic-rag/
 RUN mkdir -p data logs .chromadb
 
 # Cargar datos iniciales si existen
-COPY multiagent-restaurant/load-wines.py ./load-wines.py 2>/dev/null || true
+COPY load-wines.py ./load-wines.py
 
 # Exponer puerto (Railway usa PORT dinámico)
 EXPOSE 8000

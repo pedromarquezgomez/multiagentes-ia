@@ -1,0 +1,6 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "multiagent-restaurant/sumiller-bot/Dockerfile.railway"
+
+[deploy]
+startCommand = "python main.py" 

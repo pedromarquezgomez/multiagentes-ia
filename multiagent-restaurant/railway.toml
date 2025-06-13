@@ -1,0 +1,20 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile.railway"
+
+[deploy]
+startCommand = "chmod +x start-railway.sh && ./start-railway.sh"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+
+# Variables de entorno que Railway puede usar
+[env]
+PORT = { default = "8000" }
+ENVIRONMENT = { default = "production" }
+PYTHONPATH = { default = "/app" }
+
+# Configuración de recursos
+[resources]
+memory = "1GB"
+cpu = "0.5" 

@@ -1,0 +1,34 @@
+# Variables de entorno para Railway
+# ===================================
+
+# API Keys (REQUERIDAS)
+OPENAI_API_KEY=sk-your-openai-api-key-here
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
+
+# Configuración de entorno
+ENVIRONMENT=production
+PORT=8000
+
+# URLs de servicios (Railway las configurará automáticamente)
+RAG_MCP_URL=http://localhost:8000
+MEMORY_MCP_URL=http://localhost:8002
+
+# Base de datos
+VECTOR_DB_TYPE=chroma
+CHROMA_HOST=localhost
+CHROMA_PORT=8000
+
+# Redis (Railway proporcionará esto)
+REDIS_URL=redis://localhost:6379
+
+# Configuración HTTP
+HTTP_POOL_MAX_CONNECTIONS=100
+HTTP_POOL_KEEPALIVE_CONNECTIONS=20
+CIRCUIT_BREAKER_FAILURE_THRESHOLD=3
+CIRCUIT_BREAKER_TIMEOUT=30.0
+
+# Puertos de servicios
+SUMILLER_PORT=8001
+RAG_MCP_PORT=8000
+MEMORY_MCP_PORT=8002 

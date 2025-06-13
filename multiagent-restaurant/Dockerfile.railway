@@ -1,0 +1,43 @@
+# Dockerfile para Railway - Sistema Sumiller Completo
+FROM python:3.11-slim
+
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Crear directorio de trabajo
+WORKDIR /app
+
+# Copiar archivos de requisitos
+COPY sumiller-bot/requirements.txt requirements-sumiller.txt
+COPY mcp-agentic-rag/requirements.txt requirements-rag.txt
+
+# Crear requirements combinado
+RUN cat requirements-sumiller.txt requirements-rag.txt > requirements-combined.txt
+
+# Instalar dependencias Python
+RUN pip install --no-cache-dir -r requirements-combined.txt
+
+# Copiar el código del proyecto
+COPY config.py .
+COPY sumiller-bot/ ./sumiller-bot/
+COPY mcp-agentic-rag/ ./mcp-agentic-rag/
+
+# Crear directorios necesarios
+RUN mkdir -p data logs .chromadb
+
+# Cargar datos iniciales si existen
+COPY multiagent-restaurant/load-wines.py ./load-wines.py 2>/dev/null || true
+
+# Exponer puerto (Railway usa PORT dinámico)
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Comando de inicio
+CMD ["sh", "-c", "uvicorn sumiller-bot.main:app --host 0.0.0.0 --port ${PORT:-8000}"] 

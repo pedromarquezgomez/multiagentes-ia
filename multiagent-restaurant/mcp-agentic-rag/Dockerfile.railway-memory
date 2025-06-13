@@ -8,11 +8,11 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements mínimos para Memory Server
-COPY multiagent-restaurant/mcp-agentic-rag/requirements.txt .
+COPY mcp-agentic-rag/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar código del Memory MCP Server
-COPY multiagent-restaurant/mcp-agentic-rag/memory_mcp_server.py .
+COPY mcp-agentic-rag/memory_mcp_server.py .
 
 # Variables de entorno para Railway
 ENV PYTHONUNBUFFERED=1

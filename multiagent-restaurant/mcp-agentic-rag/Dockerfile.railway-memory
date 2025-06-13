@@ -2,9 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instalar Redis y dependencias
+# Instalar dependencias
 RUN apt-get update && apt-get install -y \
-    redis-server curl gcc \
+    curl gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements
@@ -17,10 +17,13 @@ COPY memory_mcp_server.py .
 # Variables de entorno
 ENV PYTHONUNBUFFERED=1
 ENV ENVIRONMENT=railway
-ENV REDIS_URL=redis://localhost:6379
 
 # Puerto dinámico
 EXPOSE $PORT
 
-# Comando que inicia Redis + Memory server
-CMD redis-server --daemonize yes --port 6379 && python memory_mcp_server.py
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:$PORT/health || exit 1
+
+# Comando para Memory server
+CMD python memory_mcp_server.py --port $PORT

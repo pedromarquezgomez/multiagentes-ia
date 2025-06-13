@@ -97,6 +97,27 @@ DEEPSEEK_MODEL=deepseek-chat
 
 ## 🌐 Despliegue en Producción
 
+### 🚂 Railway (Recomendado)
+
+```bash
+# 1. Instalar Railway CLI
+npm install -g @railway/cli
+
+# 2. Login en Railway
+railway login
+
+# 3. Deploy automatizado
+chmod +x railway-deploy.sh
+./railway-deploy.sh
+```
+
+**📋 Configuración Manual en Railway:**
+1. Crear base de datos Redis
+2. Configurar variables de entorno (ver `env.railway.example`)
+3. Verificar health checks
+
+Ver guía completa: `railway-setup.md`
+
 ### Firebase + Google Cloud Run
 
 ```bash
@@ -113,6 +134,16 @@ firebase deploy
 ```
 
 ### URLs de Producción
+
+**Railway:**
+- **RAG MCP**: https://rag-mcp-server-xxxxx.railway.app
+- **Memory MCP**: https://memory-mcp-server-xxxxx.railway.app  
+- **Sumiller Bot**: https://sumiller-bot-xxxxx.railway.app
+
+**Firebase:**
+- **Frontend**: https://tu-proyecto.web.app
+
+**Google Cloud:**
 - **Frontend**: https://maitre-ia.web.app
 - **Backend**: https://sumiller-bot-xxxxx.run.app
 - **RAG Server**: https://rag-mcp-server-xxxxx.run.app

@@ -62,11 +62,11 @@ class Config:
         
         # El sumiller usa estas URLs para comunicarse con otros servicios
         self.maitre_url = self.rag_mcp_url  # Por compatibilidad
-        self.sumiller_url = os.getenv('SUMILLER_URL', 'http://localhost:8001')
+        self.sumiller_url = os.getenv('SUMILLER_URL', f"http://localhost:{os.getenv('PORT', '8001')}")
         self.mcp_server_url = self.memory_mcp_url
         
         # Puerto dinámico de Railway
-        self.port = int(os.getenv('PORT', '8000'))
+        self.port = int(os.getenv('PORT', '8001'))
         
         # Configuración optimizada para Railway
         self.max_retries = 3
@@ -74,6 +74,9 @@ class Config:
         
         # URL externa (Railway la genera automáticamente)
         self.maitre_external_url = self.rag_mcp_url
+        
+        # Variables específicas de Railway
+        self.redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
         
     def setup_cloud_urls(self):
         """Configuración para Cloud Run."""

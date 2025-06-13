@@ -4,31 +4,26 @@ WORKDIR /app
 
 # Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
-    curl gcc \
+    gcc g++ curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar requirements y instalar
+# Copiar y instalar dependencias Python
 COPY sumiller-bot/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar código fuente
+# Copiar código del sumiller
 COPY sumiller-bot/main.py .
-COPY sumiller-bot/query_filter.py .
-COPY sumiller-bot/http_client.py .
+COPY sumiller-bot/sumiller_agent.py .
+COPY sumiller-bot/circuit_breaker.py .
 
-# Copiar config.py desde la raíz del proyecto
-COPY config.py .
-
-# Variables de entorno
+# Variables de entorno para Railway
 ENV PYTHONUNBUFFERED=1
 ENV ENVIRONMENT=railway
+ENV HOST=0.0.0.0
+ENV PORT=${PORT:-8000}
 
-# Puerto dinámico de Railway
+# Puerto dinámico Railway
 EXPOSE $PORT
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:$PORT/health || exit 1
-
 # Comando de inicio
-CMD uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
+CMD python main.py

@@ -2,28 +2,30 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instalar dependencias
+# Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
-    curl gcc \
+    gcc g++ curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar requirements
-COPY requirements.txt .
+# Copiar requirements mínimos para Memory Server
+COPY mcp-agentic-rag/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar código
-COPY memory_mcp_server.py .
+# Copiar código del Memory MCP Server
+COPY mcp-agentic-rag/memory_mcp_server.py .
 
-# Variables de entorno
+# Variables de entorno para Railway
 ENV PYTHONUNBUFFERED=1
 ENV ENVIRONMENT=railway
+ENV HOST=0.0.0.0
+ENV PORT=${PORT:-8000}
 
-# Puerto dinámico
+# Puerto dinámico Railway
 EXPOSE $PORT
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
     CMD curl -f http://localhost:$PORT/health || exit 1
 
-# Comando para Memory server
-CMD python memory_mcp_server.py --port $PORT
+# Comando de inicio
+CMD python memory_mcp_server.py

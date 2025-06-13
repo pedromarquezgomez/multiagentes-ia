@@ -10,15 +10,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar y instalar dependencias Python completas
-COPY multiagent-restaurant/mcp-agentic-rag/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar código completo del RAG MCP Server
-COPY multiagent-restaurant/mcp-agentic-rag/rag_mcp_server.py .
-COPY multiagent-restaurant/mcp-agentic-rag/start_server_main.py .
+COPY rag_mcp_server.py .
+COPY start_server_main.py .
 
 # Copiar base de conocimiento
-COPY multiagent-restaurant/mcp-agentic-rag/knowledge_base/ ./knowledge_base/
+COPY knowledge_base/ ./knowledge_base/
 
 # Crear directorios necesarios
 RUN mkdir -p /app/data /app/.chromadb

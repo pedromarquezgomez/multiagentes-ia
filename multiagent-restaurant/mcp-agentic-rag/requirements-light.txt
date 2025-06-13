@@ -1,0 +1,30 @@
+# requirements-light.txt - Versión liviana para Railway
+# MCP SDK
+mcp>=1.0.0
+
+# FastAPI y servidor web
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Base de datos vectorial liviana (sin ChromaDB pesado)
+# chromadb>=0.4.0  # Comentado - muy pesado
+
+# Embeddings livianos (sin sentence-transformers que incluye PyTorch)
+# sentence-transformers>=2.2.0  # Comentado - incluye PyTorch
+
+# OpenAI para LLM
+openai>=1.3.0
+
+# Redis para memoria
+redis[hiredis]>=5.0.0
+
+# Utilidades básicas
+requests>=2.31.0
+pydantic>=2.4.0
+python-dotenv>=1.0.0
+
+# Procesamiento básico (sin numpy pesado)
+# numpy>=1.24.0  # Comentado - será instalado por dependencias si es necesario
+
+# Embedding alternativo liviano
+scikit-learn>=1.0.0  # Para TF-IDF embeddings simples 

@@ -1,0 +1,29 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instalar dependencias mínimas del sistema
+RUN apt-get update && apt-get install -y \
+    gcc g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar requirements ultra-livianos
+COPY mcp-agentic-rag/requirements-no-db.txt .
+RUN pip install --no-cache-dir -r requirements-no-db.txt
+
+# Descargar datos NLTK necesarios
+RUN python -c "import nltk; nltk.download('punkt')" 
+
+# Copiar código simple
+COPY mcp-agentic-rag/rag_server_simple.py .
+COPY mcp-agentic-rag/knowledge_base/ ./knowledge_base/
+
+# Variables de entorno para Railway
+ENV PYTHONUNBUFFERED=1
+ENV ENVIRONMENT=railway
+
+# Puerto dinámico Railway
+EXPOSE $PORT
+
+# Comando de inicio
+CMD python rag_server_simple.py 

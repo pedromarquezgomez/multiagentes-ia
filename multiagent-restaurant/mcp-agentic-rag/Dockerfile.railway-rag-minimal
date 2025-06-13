@@ -1,0 +1,31 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    gcc g++ curl build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar requirements
+COPY mcp-agentic-rag/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar código
+COPY mcp-agentic-rag/rag_mcp_server.py .
+COPY mcp-agentic-rag/start_server_main.py .
+
+# Crear directorio para knowledge base (se populará dinámicamente)
+RUN mkdir -p ./knowledge_base
+
+# Variables de entorno para Railway
+ENV PYTHONUNBUFFERED=1
+ENV ENVIRONMENT=railway
+ENV VECTOR_DB_TYPE=chroma
+ENV USE_EMBEDDED_CHROMA=true
+
+# Puerto dinámico
+EXPOSE $PORT
+
+# Comando de inicio
+CMD python start_server_main.py 

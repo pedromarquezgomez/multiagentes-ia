@@ -1,0 +1,30 @@
+# requirements-cpu.txt - Versión CPU completa pero más liviana
+# MCP SDK
+mcp>=1.0.0
+
+# FastAPI y servidor web
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# ChromaDB (usando SQLite, sin dependencias pesadas)
+chromadb>=0.4.0
+
+# Sentence transformers CPU-only (sin CUDA)
+sentence-transformers>=2.2.0
+torch>=1.11.0,<2.0.0 --index-url https://download.pytorch.org/whl/cpu
+torchvision>=0.12.0,<1.0.0 --index-url https://download.pytorch.org/whl/cpu
+
+# OpenAI para LLM
+openai>=1.3.0
+
+# Redis para memoria
+redis[hiredis]>=5.0.0
+
+# Utilidades
+requests>=2.31.0
+pydantic>=2.4.0
+python-dotenv>=1.0.0
+
+# Procesamiento de texto
+numpy>=1.24.0
+scikit-learn>=1.0.0 

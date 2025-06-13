@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instalar solo FastAPI y Uvicorn
+RUN pip install fastapi uvicorn
+
+# Copiar archivo simple
+COPY mcp-agentic-rag/start_server_simple.py .
+
+# Variables de entorno
+ENV PYTHONUNBUFFERED=1
+ENV ENVIRONMENT=railway
+
+# Puerto dinámico
+EXPOSE $PORT
+
+# Comando de inicio
+CMD python start_server_simple.py 

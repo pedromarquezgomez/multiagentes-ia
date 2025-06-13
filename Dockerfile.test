@@ -1,0 +1,42 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar requirements y instalar dependencias Python
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar código fuente
+COPY main.py .
+COPY memory.py .
+COPY query_filter.py .
+
+# Copiar archivos de configuración de tests
+COPY pytest.ini .
+COPY run-tests.sh .
+
+# Copiar directorio de tests completo
+COPY tests/ tests/
+
+# Crear directorios necesarios
+RUN mkdir -p /app/data /app/knowledge_base /app/memory
+
+# Variables de entorno para tests
+ENV PYTHONPATH=/app
+ENV ENVIRONMENT=test
+
+# Hacer ejecutable el script de tests
+RUN chmod +x run-tests.sh
+
+# Exponer puerto para tests de producción
+EXPOSE 8080
+
+# Comando por defecto: ejecutar tests
+CMD ["./run-tests.sh"] 

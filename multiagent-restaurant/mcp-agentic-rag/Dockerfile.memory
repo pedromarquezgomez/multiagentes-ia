@@ -1,0 +1,31 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar requirements
+COPY requirements.txt .
+
+# Instalar dependencias Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar código fuente del Memory MCP Server
+COPY memory_mcp_server.py ./memory_mcp_server.py
+
+# Crear directorios necesarios
+RUN mkdir -p /app/data
+
+# Exponer puerto
+EXPOSE 8002
+
+# Variables de entorno por defecto
+ENV REDIS_URL=redis://localhost:6379
+ENV PORT=8002
+
+# Comando por defecto
+CMD ["python", "memory_mcp_server.py"]

@@ -8,13 +8,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar y instalar dependencias Python
-COPY sumiller-bot/requirements.txt .
+COPY multiagent-restaurant/sumiller-bot/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar código del sumiller
-COPY sumiller-bot/main.py .
-COPY sumiller-bot/sumiller_agent.py .
-COPY sumiller-bot/circuit_breaker.py .
+COPY multiagent-restaurant/sumiller-bot/main.py .
+COPY multiagent-restaurant/sumiller-bot/sumiller_agent.py .
+COPY multiagent-restaurant/sumiller-bot/circuit_breaker.py .
 
 # Variables de entorno para Railway
 ENV PYTHONUNBUFFERED=1

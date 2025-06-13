@@ -21,8 +21,9 @@ COPY multiagent-restaurant/sumiller-bot/config.py .
 ENV PYTHONUNBUFFERED=1
 ENV ENVIRONMENT=railway
 ENV HOST=0.0.0.0
+ENV PORT=${PORT:-8000}
 
-# Puerto dinámico Railway (Railway proporciona automáticamente la variable PORT)
+# Puerto dinámico Railway
 EXPOSE $PORT
 
 # Comando de inicio

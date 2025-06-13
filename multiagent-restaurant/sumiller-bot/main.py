@@ -25,8 +25,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 PORT = int(os.getenv("PORT", str(config.sumiller_port if config.is_local() else 8080)))
-RAG_MCP_URL = os.getenv('RAG_MCP_URL', "http://localhost:8000")
-MEMORY_MCP_URL = os.getenv('MEMORY_MCP_URL', "http://localhost:8002")
+RAG_MCP_URL = config.rag_mcp_url
+MEMORY_MCP_URL = config.memory_mcp_url
 
 # Cliente OpenAI (sin cambios)
 OPENAI_API_KEY = config.get_openai_key()

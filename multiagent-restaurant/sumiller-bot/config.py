@@ -42,8 +42,8 @@ class Config:
     def setup_railway_urls(self):
         """Configuración para Railway."""
         # URLs desde variables de entorno de Railway
-        self.rag_mcp_url = os.getenv('RAG_MCP_URL', 'http://localhost:8000')
-        self.memory_mcp_url = os.getenv('MEMORY_MCP_URL', 'http://localhost:8002')
+        self.rag_mcp_url = os.getenv('RAG_MCP_URL', 'https://rag-mcp-server-production.up.railway.app')
+        self.memory_mcp_url = os.getenv('MEMORY_MCP_URL', 'https://memory-mcp-server-production.up.railway.app')
         
         # Puerto desde variable de entorno (Railway)
         self.port = int(os.getenv('PORT', '8000'))

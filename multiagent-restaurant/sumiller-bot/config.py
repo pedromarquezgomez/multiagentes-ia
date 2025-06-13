@@ -18,9 +18,13 @@ class Config:
         if os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'):
             return 'cloud'
         
+        # Railway environment
+        if os.getenv('RAILWAY_ENVIRONMENT'):
+            return 'railway'
+        
         # Si hay variable explícita
         env = os.getenv('ENVIRONMENT', '').lower()
-        if env in ['local', 'cloud']:
+        if env in ['local', 'cloud', 'railway']:
             return env
             
         # Por defecto asumimos local
@@ -30,8 +34,19 @@ class Config:
         """Configura URLs según el entorno."""
         if self.environment == 'cloud':
             self.setup_cloud_urls()
+        elif self.environment == 'railway':
+            self.setup_railway_urls()
         else:
             self.setup_local_urls()
+    
+    def setup_railway_urls(self):
+        """Configuración para Railway."""
+        # URLs desde variables de entorno de Railway
+        self.rag_mcp_url = os.getenv('RAG_MCP_URL', 'http://localhost:8000')
+        self.memory_mcp_url = os.getenv('MEMORY_MCP_URL', 'http://localhost:8002')
+        
+        # Puerto desde variable de entorno (Railway)
+        self.port = int(os.getenv('PORT', '8000'))
             
     def setup_local_urls(self):
         """Configuración para entorno local (Docker Compose)."""
@@ -70,6 +85,14 @@ class Config:
                 return f.read().strip()
         return os.getenv('OPENAI_API_KEY')
     
+    def get_openai_base_url(self):
+        """Obtiene la base URL de OpenAI."""
+        return os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1')
+    
+    def get_openai_model(self):
+        """Obtiene el modelo de OpenAI a usar."""
+        return os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+    
     def get_deepseek_key(self):
         """Obtiene la API key de DeepSeek de forma segura."""
         # Prioridad: 1) Secreto montado, 2) Variable de entorno
@@ -106,14 +129,18 @@ class Config:
         """Verifica si estamos en Cloud Run."""
         return self.environment == 'cloud'
     
+    def is_railway(self) -> bool:
+        """Verifica si estamos en Railway."""
+        return self.environment == 'railway'
+    
     def __str__(self):
         """Representación string para debugging."""
         return f"""
 Config Summary:
   Environment: {self.environment}
-  Maitre URL: {self.maitre_url}
-  Sumiller URL: {self.sumiller_url}
-  MCP Server URL: {self.mcp_server_url}
+  OpenAI Key: {'✓ Configured' if self.get_openai_key() else '✗ Missing'}
+  OpenAI Base URL: {self.get_openai_base_url()}
+  OpenAI Model: {self.get_openai_model()}
   DeepSeek Key: {'✓ Configured' if self.get_deepseek_key() else '✗ Missing'}
   DeepSeek Base URL: {self.get_deepseek_base_url()}
   DeepSeek Model: {self.get_deepseek_model()}

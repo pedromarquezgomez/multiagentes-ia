@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/sumiller.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/sumiller.py"
+    }
+  ],
+  "env": {
+    "ENVIRONMENT": "vercel"
+  },
+  "functions": {
+    "api/sumiller.py": {
+      "maxDuration": 30
+    }
+  }
+} 
